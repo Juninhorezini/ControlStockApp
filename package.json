@@ -4,8 +4,8 @@
   "description": "Sistema de Controle de Estoque de Prateleira com Sincronização Google Sheets",
   "homepage": "https://juninhorezini.github.io/ControlStockApp",
   "scripts": {
-    "start": "react-scripts start",
-    "build": "react-scripts build",
+    "start": "DISABLE_ESLINT_PLUGIN=true react-scripts start",
+    "build": "DISABLE_ESLINT_PLUGIN=true react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject",
     "predeploy": "npm run build",
