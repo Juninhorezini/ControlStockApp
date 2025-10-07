@@ -11,31 +11,37 @@ permissions:
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout código
         uses: actions/checkout@v3
-      
+
       - name: Setup Node.js
         uses: actions/setup-node@v3
         with:
           node-version: '18'
           cache: 'npm'
-      
+
       - name: Instalar dependências
         run: npm ci
-      
+
       - name: Build da aplicação
         run: npm run build
         env:
           CI: false
-      
+
       - name: Deploy para branch main (docs/)
         run: |
-          # Copiar build para docs/
+          # Criar pasta docs se não existir
           rm -rf docs
-          cp -r build docs
-          
+          mkdir -p docs
+
+          # Copiar build para docs/
+          cp -r build/* docs/
+
+          # Copiar .nojekyll para docs/
+          cp .nojekyll docs/.nojekyll || touch docs/.nojekyll
+
           # Commit e push
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
