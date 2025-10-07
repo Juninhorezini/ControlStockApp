@@ -1,10 +1,35 @@
 import React, { useState, useEffect } from 'react';
 import { Search, Plus, Edit, Trash2, Package, MapPin, Grid, Save, X, Minus, Shield, Settings, Lock, User, ChevronDown } from 'lucide-react';
 
-// Removed hatch reference for standalone React app
+
+// Hook personalizado para substituir useStoredState do Hatchcanvas
+const useStoredState = (key, initialValue) => {
+  const [state, setState] = React.useState(() => {
+    try {
+      const item = window.localStorage.getItem(key);
+      return item ? JSON.parse(item) : initialValue;
+    } catch (error) {
+      console.log(error);
+      return initialValue;
+    }
+  });
+
+  const setValue = (value) => {
+    try {
+      const valueToStore = value instanceof Function ? value(state) : value;
+      setState(valueToStore);
+      window.localStorage.setItem(key, JSON.stringify(valueToStore));
+    } catch (error) {
+      console.log(error);
+    }
+  };
+
+  return [state, setValue];
+};
+
 
 const StockControlApp = () => {
-  const user = useUser();
+  // User authentication removed for standalone version
   const [shelves, setShelves] = useStoredState('shelves', []);
   const [products, setProducts] = useStoredState('products', {});
   const [selectedShelf, setSelectedShelf] = useStoredState('selectedShelf', 0);
