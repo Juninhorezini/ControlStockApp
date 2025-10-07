@@ -1,0 +1,13 @@
+{
+  "files": {
+    "main.css": "/ControlStockApp/static/css/main.233b3b67.css",
+    "main.js": "/ControlStockApp/static/js/main.907bb48a.js",
+    "index.html": "/ControlStockApp/index.html",
+    "main.233b3b67.css.map": "/ControlStockApp/static/css/main.233b3b67.css.map",
+    "main.907bb48a.js.map": "/ControlStockApp/static/js/main.907bb48a.js.map"
+  },
+  "entrypoints": [
+    "static/css/main.233b3b67.css",
+    "static/js/main.907bb48a.js"
+  ]
+}
