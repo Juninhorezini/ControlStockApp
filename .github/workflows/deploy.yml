@@ -6,34 +6,39 @@ on:
       - main
 
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
-
+    
     steps:
       - name: Checkout código
         uses: actions/checkout@v3
-
+      
       - name: Setup Node.js
         uses: actions/setup-node@v3
         with:
           node-version: '18'
           cache: 'npm'
-
+      
       - name: Instalar dependências
         run: npm ci
-
+      
       - name: Build da aplicação
         run: npm run build
         env:
           CI: false
-
-      - name: Deploy para GitHub Pages
-        uses: peaceiris/actions-gh-pages@v3
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./build
+      
+      - name: Deploy para branch main (docs/)
+        run: |
+          # Copiar build para docs/
+          rm -rf docs
+          cp -r build docs
+          
+          # Commit e push
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git add docs/
+          git commit -m "docs: update GitHub Pages from build" || echo "No changes"
+          git push origin main
