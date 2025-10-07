@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Search, Plus, Edit, Trash2, Package, MapPin, Grid, Save, X, Minus, Shield, Settings, Lock, User, ChevronDown } from 'lucide-react';
 
-const { useStoredState, useUser } = hatch;
+// Removed hatch reference for standalone React app
 
 const StockControlApp = () => {
   const user = useUser();
@@ -197,7 +197,7 @@ const StockControlApp = () => {
     }
 
     const displayName = getUserDisplayName(adminId);
-    const confirmation = confirm(`🗑️ Tem certeza que deseja remover "${displayName}" dos administradores?\n\nEsta ação não pode ser desfeita.`);
+    const confirmation = window.confirm(`🗑️ Tem certeza que deseja remover "${displayName}" dos administradores?\n\nEsta ação não pode ser desfeita.`);
     if (!confirmation) return;
 
     try {
@@ -373,24 +373,25 @@ const StockControlApp = () => {
 
   
   // Função para sincronizar produto específico com Google Sheets
-  // ⭐ FUNÇÃO CORRIGIDA: Sincronização individual com tratamento de resposta
   const syncSingleProductWithSheets = async (sku, color = '') => {
-    if (!sheetsUrl) {
-      console.warn('⚠️ URL do Google Sheets não configurada');
-      return { success: false, error: 'URL não configurada' };
-    }
+    if (!sheetsUrl) return;
+    
 
+    
     try {
+      // Debug: Log dos dados que estão sendo enviados
       console.log('🔄 Sync Individual - SKU:', sku, 'COR:', color);
-
+      
+      // Consolidar dados apenas para este SKU+COR
       const allConsolidated = consolidateProductsBySKUColor();
+      console.log('📦 Produtos consolidados:', allConsolidated.map(p => ({sku: p.sku, color: p.color, qty: p.quantity})));
+      
       const productData = allConsolidated.find(p => p.sku === sku && p.color === color);
-
       console.log('🎯 Produto encontrado:', productData);
-
-      // ⭐ MUDANÇA: Removido 'no-cors' para permitir leitura da resposta
-      const response = await fetch(sheetsUrl, {
+      
+      await fetch(sheetsUrl, {
         method: 'POST',
+        mode: 'no-cors',
         headers: {
           'Content-Type': 'application/json',
         },
@@ -403,37 +404,22 @@ const StockControlApp = () => {
             cor: productData.color.trim(),
             quantidade: productData.quantity,
             dataMovimentacao: formatDateBR(new Date(productData.lastModified))
-          } : null
+          } : null // null = remover da planilha
         })
       });
-
-      // ⭐ NOVO: Ler e processar resposta
-      const result = await response.json();
-
-      if (result.success) {
-        console.log('✅ Sincronização bem-sucedida:', result);
-        return { success: true, data: result };
-      } else {
-        console.error('❌ Erro retornado pelo servidor:', result.error);
-        return { success: false, error: result.error };
-      }
-
+      
+      console.log('📤 Dados enviados para Google Sheets:', {
+        action: 'updateSingleProduct',
+        sku: sku.trim(),
+        color: color.trim(),
+        hasData: !!productData
+      });
+      
+      // Não conseguimos ler a resposta por causa do mode: 'no-cors'
+      // Mas o debug está sendo retornado pelo Google Apps Script
+      
     } catch (error) {
       console.error('❌ Erro ao sincronizar produto:', error);
-
-      let errorMessage = 'Erro desconhecido';
-
-      if (error.message.includes('Failed to fetch')) {
-        errorMessage = 'Erro de conexão. Verifique a URL do Web App e se o script está publicado corretamente.';
-      } else if (error.message.includes('NetworkError')) {
-        errorMessage = 'Erro de rede. Verifique sua conexão com a internet.';
-      } else if (error.message.includes('CORS')) {
-        errorMessage = 'Erro de CORS. Certifique-se de que o script Apps Script está publicado com acesso "Qualquer pessoa".';
-      } else {
-        errorMessage = error.message;
-      }
-
-      return { success: false, error: errorMessage };
     }
   };
 
@@ -449,7 +435,7 @@ const StockControlApp = () => {
       
       await fetch(sheetsUrl, {
         method: 'POST',
-        
+        mode: 'no-cors',
         headers: {
           'Content-Type': 'application/json',
         },
@@ -490,7 +476,7 @@ const StockControlApp = () => {
 
       await fetch(sheetsUrl, {
         method: 'POST',
-        
+        mode: 'no-cors',
         headers: {
           'Content-Type': 'application/json',
         },
@@ -1138,7 +1124,7 @@ const StockControlApp = () => {
       // Se há produtos afetados, perguntar ao usuário
       if (affectedProducts.length > 0) {
         const productList = affectedProducts.map(p => `${p.product.sku} (${p.position})`).join(', ');
-        const confirmation = confirm(
+        const confirmation = window.confirm(
           `⚠️ ATENÇÃO: Reduzir o tamanho da prateleira irá remover ${affectedProducts.length} produto(s):\n\n${productList}\n\nDeseja continuar? Os produtos serão perdidos permanentemente.`
         );
         
