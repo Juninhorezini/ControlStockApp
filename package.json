@@ -2,7 +2,7 @@
   "name": "control-stock-app",
   "version": "2.0.0",
   "description": "Sistema de Controle de Estoque de Prateleira com Sincronização Google Sheets",
-  "homepage": "https://juninhorezini.github.io/ControlStockApp",
+  "homepage": ".",
   "scripts": {
     "start": "DISABLE_ESLINT_PLUGIN=true react-scripts start",
     "build": "DISABLE_ESLINT_PLUGIN=true react-scripts build",
