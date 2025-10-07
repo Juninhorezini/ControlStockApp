@@ -27,6 +27,15 @@ const useStoredState = (key, initialValue) => {
   return [state, setValue];
 };
 
+  // Mock user object for standalone version
+  const user = {
+    id: 'local-user-' + Math.random().toString(36).substr(2, 9),
+    name: 'Usuário Local',
+    color: '#4CAF50'
+  };
+
+};
+
 
 const StockControlApp = () => {
   // User authentication removed for standalone version
