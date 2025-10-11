@@ -28,7 +28,6 @@ const useStoredState = (key, initialValue) => {
 };
 
 
-};
 
 
 const StockControlApp = () => {
