@@ -400,3 +400,5 @@ MIT License - Livre para uso e modificação
 **🎉 Projeto configurado e pronto para uso!**
 
 **Próximo passo:** Configure a URL do Web App no aplicativo e comece a usar!
+
+<!-- Deploy trigger -->
