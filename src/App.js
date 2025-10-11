@@ -417,15 +417,26 @@ const StockControlApp = () => {
     try {
       console.log('🔄 Sync Individual - SKU:', sku, 'COR:', color);
 
-      const allConsolidated = consolidateProductsBySKUColor();
-      const productData = allConsolidated.find(p => p.sku === sku && p.color === color);
+      // Calculate total quantity directly from products
+      let totalQuantity = 0;
+      Object.values(products).forEach(product => {
+        if (product.sku === sku && product.colors) {
+          product.colors.forEach(c => {
+            if (c.code === color) {
+              totalQuantity += c.quantity || 0;
+            }
+          });
+        }
+      });
+
+      console.log('📊 Quantidade total calculada:', totalQuantity);
 
       // Build GET URL with parameters
       const params = new URLSearchParams({
         action: 'updateSingleProduct',
         sku: sku.trim(),
         color: color.trim(),
-        quantidade: productData ? productData.quantity : 0
+        quantidade: totalQuantity
       });
 
       const url = `${sheetsUrl}?${params.toString()}`;
@@ -437,12 +448,13 @@ const StockControlApp = () => {
       console.log('📤 Dados enviados para Google Sheets (via GET):', {
         sku: sku.trim(),
         color: color.trim(),
-        quantidade: productData ? productData.quantity : 0
+        quantidade: totalQuantity
       });
 
     } catch (error) {
       console.error('❌ Erro ao sincronizar produto:', error);
     }
+  };
   };
 
   // Função para debug da planilha
