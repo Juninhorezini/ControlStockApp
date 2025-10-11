@@ -128,7 +128,7 @@ const StockControlApp = () => {
 
   // Estados para Google Sheets
   const [showSheetsModal, setShowSheetsModal] = useState(false);
-  const [sheetsUrl, setSheetsUrl] = useStoredState('sheetsUrl', '');
+  const [sheetsUrl, setSheetsUrl] = useStoredState('sheetsUrl', SHEETS_API_URL);
   const [syncStatus, setSyncStatus] = useState('');
 
   // Sistema de permissões - CORRIGIDO
