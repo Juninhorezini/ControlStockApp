@@ -30,8 +30,15 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Build
-        run: npm run build
+      - name: Build with verbose output
+        run: |
+          echo "🔨 Iniciando build do React..."
+          npm run build 2>&1 | tee build.log || {
+            echo "❌ BUILD FALHOU!"
+            echo "📋 Últimas 50 linhas do log:"
+            tail -50 build.log
+            exit 1
+          }
         env:
           CI: false
 
@@ -39,8 +46,25 @@ jobs:
         run: |
           echo "📁 Verificando pasta build:"
           ls -la build/ || echo "❌ Pasta build não existe!"
+          echo ""
           echo "📄 Arquivos em build:"
-          find build -type f | head -20
+          find build -type f | head -30
+          echo ""
+          echo "📊 Total de arquivos:"
+          find build -type f | wc -l
+
+      - name: Check for index.html
+        run: |
+          if [ -f "build/index.html" ]; then
+            echo "✅ index.html encontrado!"
+            echo "📄 Primeiras linhas do index.html:"
+            head -20 build/index.html
+          else
+            echo "❌ index.html NÃO encontrado!"
+            echo "🔍 Conteúdo completo da pasta build:"
+            ls -laR build/
+            exit 1
+          fi
 
       - name: Setup Pages
         uses: actions/configure-pages@v4
