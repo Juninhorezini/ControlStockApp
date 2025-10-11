@@ -429,7 +429,7 @@ const StockControlApp = () => {
       
       await fetch(sheetsUrl, {
         method: 'POST',
-        // mode: 'no-cors', // REMOVED: CORS now handled by Apps Script
+        mode: 'no-cors',
         headers: {
           'Content-Type': 'application/json',
         },
@@ -473,7 +473,7 @@ const StockControlApp = () => {
       
       await fetch(sheetsUrl, {
         method: 'POST',
-        // mode: 'no-cors', // REMOVED: CORS now handled by Apps Script
+        mode: 'no-cors',
         headers: {
           'Content-Type': 'application/json',
         },
@@ -514,7 +514,7 @@ const StockControlApp = () => {
 
       await fetch(sheetsUrl, {
         method: 'POST',
-        // mode: 'no-cors', // REMOVED: CORS now handled by Apps Script
+        mode: 'no-cors',
         headers: {
           'Content-Type': 'application/json',
         },
