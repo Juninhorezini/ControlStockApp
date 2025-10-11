@@ -413,49 +413,33 @@ const StockControlApp = () => {
   // Função para sincronizar produto específico com Google Sheets
   const syncSingleProductWithSheets = async (sku, color = '') => {
     if (!sheetsUrl) return;
-    
 
-    
     try {
-      // Debug: Log dos dados que estão sendo enviados
       console.log('🔄 Sync Individual - SKU:', sku, 'COR:', color);
-      
-      // Consolidar dados apenas para este SKU+COR
+
       const allConsolidated = consolidateProductsBySKUColor();
-      console.log('📦 Produtos consolidados:', allConsolidated.map(p => ({sku: p.sku, color: p.color, qty: p.quantity})));
-      
       const productData = allConsolidated.find(p => p.sku === sku && p.color === color);
-      console.log('🎯 Produto encontrado:', productData);
-      
-      await fetch(sheetsUrl, {
-        method: 'POST',
-        mode: 'no-cors',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          action: 'updateSingleProduct',
-          sku: sku.trim(),
-          color: color.trim(),
-          data: productData ? {
-            sku: productData.sku.trim(),
-            cor: productData.color.trim(),
-            quantidade: productData.quantity,
-            dataMovimentacao: formatDateBR(new Date(productData.lastModified))
-          } : null // null = remover da planilha
-        })
-      });
-      
-      console.log('📤 Dados enviados para Google Sheets:', {
+
+      // Build GET URL with parameters
+      const params = new URLSearchParams({
         action: 'updateSingleProduct',
         sku: sku.trim(),
         color: color.trim(),
-        hasData: !!productData
+        quantidade: productData ? productData.quantity : 0
       });
-      
-      // Não conseguimos ler a resposta por causa do mode: 'no-cors'
-      // Mas o debug está sendo retornado pelo Google Apps Script
-      
+
+      const url = `${sheetsUrl}?${params.toString()}`;
+
+      // Use Image tag to avoid CORS (fire-and-forget)
+      const img = new Image();
+      img.src = url;
+
+      console.log('📤 Dados enviados para Google Sheets (via GET):', {
+        sku: sku.trim(),
+        color: color.trim(),
+        quantidade: productData ? productData.quantity : 0
+      });
+
     } catch (error) {
       console.error('❌ Erro ao sincronizar produto:', error);
     }
