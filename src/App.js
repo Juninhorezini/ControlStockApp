@@ -3,6 +3,10 @@ import { Search, Plus, Edit, Trash2, Package, MapPin, Grid, Save, X, Minus, Shie
 
 
 // Hook personalizado para substituir useStoredState do Hatchcanvas
+
+// Google Sheets API Configuration
+const SHEETS_API_URL = "https://script.google.com/macros/s/AKfycbxceiRhNkxgm_zrTh0hXwLtriRFgskXWejmSSZ7dI3tW_uK8nGvliY3HPgyHYXJKC5F/exec";
+
 const useStoredState = (key, initialValue) => {
   const [state, setState] = React.useState(() => {
     try {
