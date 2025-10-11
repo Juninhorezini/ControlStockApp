@@ -455,7 +455,6 @@ const StockControlApp = () => {
       console.error('❌ Erro ao sincronizar produto:', error);
     }
   };
-  };
 
   // Função para debug da planilha
   const debugSpreadsheet = async () => {
