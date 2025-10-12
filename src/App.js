@@ -884,6 +884,7 @@ const StockControlApp = () => {
       // Sync locations -> products
       const locsRef = ref(database, 'locations');
       const unsubLocs = onValue(locsRef, (snapshot) => {
+        console.log('🔥🔥🔥 FIREBASE MUDOU! Timestamp:', Date.now());
         const locs = snapshot.val() || {};
         const prods = {};
 
@@ -901,6 +902,7 @@ const StockControlApp = () => {
           prods[key].colors.push({ code: loc.color, quantity: loc.quantity });
         });
 
+        console.log('📦 setProducts chamado! Produtos:', Object.keys(prods).length);
         setProducts(prods);
         setFirebaseSynced(true);
         console.log(`✅ ${Object.keys(locs).length} localizações carregadas`);
@@ -2244,6 +2246,9 @@ const StockControlApp = () => {
 
     return rows;
   };
+
+    // 🐛 DEBUG - Ver no console
+  console.log('🎨 Component renderizando, products:', Object.keys(products).length);
 
   // Loading state
   if (!isInitialized) {
