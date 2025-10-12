@@ -1495,6 +1495,29 @@ const StockControlApp = () => {
     }
   };
 
+
+  // Helper: Save location to Firebase
+  const saveLocationToFirebase = async (locationId, locationData) => {
+    try {
+      const locRef = ref(database, `locations/${locationId}`);
+      await set(locRef, locationData);
+      console.log(`✅ Firebase: Salvo ${locationId}`);
+    } catch (err) {
+      console.error('❌ Firebase save error:', err);
+    }
+  };
+
+  // Helper: Delete location from Firebase
+  const deleteLocationFromFirebase = async (locationId) => {
+    try {
+      const locRef = ref(database, `locations/${locationId}`);
+      await remove(locRef);
+      console.log(`🗑️ Firebase: Removido ${locationId}`);
+    } catch (err) {
+      console.error('❌ Firebase delete error:', err);
+    }
+  };
+
   const saveProduct = () => {
     const oldProduct = (products || {})[editingPosition.key];
     
