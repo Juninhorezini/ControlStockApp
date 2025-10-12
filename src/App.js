@@ -1397,9 +1397,9 @@ const StockControlApp = () => {
         await remove(ref(database, `locations/${locationId}`));
         console.log('🗑️ Firebase: Location removida');
       } else if (color.quantity > 0) {
-        // Update ou Create
+        // Update ou Create - usar ID determinístico
         if (!locationId) {
-          locationId = push(ref(database, 'locations')).key;
+          locationId = `loc_${shelfId}_${row}_${col}_${color.code}`;
         }
 
         const locationData = {
@@ -1460,7 +1460,55 @@ const StockControlApp = () => {
       const currentShelf = shelves.find(s => s.id === shelfId);
       if (!currentShelf) return;
 
-      productData.colors.forEach(async (color) => {
+      // Primeiro, remover todas as locations antigas desta posição
+
+
+      const locsRef = ref(database, 'locations');
+
+
+      const snapshot = await new Promise(resolve => {
+
+
+        onValue(locsRef, resolve, { onlyOnce: true });
+
+
+      });
+
+
+      const allLocs = snapshot.val() || {};
+
+
+      
+
+
+      // Remover locations antigas desta posição
+
+
+      for (const [locId, loc] of Object.entries(allLocs)) {
+
+
+        if (loc.shelf.id === currentShelf.id && loc.position.row === row && loc.position.col === col) {
+
+
+          await remove(ref(database, `locations/${locId}`));
+
+
+          console.log('🗑️ Removida location antiga:', locId);
+
+
+        }
+
+
+      }
+
+
+      
+
+
+      // Agora salvar as novas locations
+
+
+      for (const color of productData.colors) {
         const locationData = {
           sku: productData.sku,
           color: color.code,
@@ -1484,11 +1532,13 @@ const StockControlApp = () => {
           }
         };
 
-        // Criar novo location ID
-        const newLocRef = push(ref(database, 'locations'));
-        await set(newLocRef, locationData);
-        console.log('✅ Salvo no Firebase:', newLocRef.key);
-      });
+        // Criar ID determinístico para evitar duplicação
+        const locationId = `loc_${currentShelf.id}_${row}_${col}_${color.code}`;
+        await set(ref(database, `locations/${locationId}`), locationData);
+        console.log('✅ Salvo no Firebase:', locationId);
+      }
+
+
 
     } catch (error) {
       console.error('❌ Erro ao salvar no Firebase:', error);
