@@ -1345,8 +1345,7 @@ const StockControlApp = () => {
           setTimeout(() => {
             validColors.forEach(color => {
               syncSingleProductWithSheets(updatedProduct.sku, color.code);
-          });
-        }
+            });
           }, 100);
         }
         
