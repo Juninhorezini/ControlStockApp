@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { database, ref, onValue, set, update, remove, runTransaction, push } from './firebaseConfig';
+import { database, ref, onValue, set, update, remove, runTransaction, push } from '../firebaseConfig';
 
 // Hook para sincronizar com Firebase
 export const useFirebaseSync = () => {
