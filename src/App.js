@@ -47,7 +47,7 @@ const StockControlApp = () => {
 
   // User authentication removed for standalone version
   const [shelves, setShelves] = useStoredState('shelves', []);
-  const [products, setProducts] = useStoredState('products', {});
+  const [products, setProducts] = useState({});  // Firebase é a fonte da verdade
   const [selectedShelf, setSelectedShelf] = useStoredState('selectedShelf', 0);
   const [searchSKU, setSearchSKU] = useState('');
   const [searchColor, setSearchColor] = useState('');
