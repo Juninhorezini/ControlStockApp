@@ -1433,6 +1433,68 @@ const StockControlApp = () => {
     }
   };
 
+
+  // Helper: Salvar produto no Firebase
+  const saveProductToFirebase = async (shelfId, row, col, productData) => {
+    try {
+      console.log('💾 Salvando no Firebase:', { shelfId, row, col, productData });
+
+      if (!productData.sku || !productData.colors || productData.colors.length === 0) {
+        // Deletar todas as localizações deste produto
+        const locsRef = ref(database, 'locations');
+        const snapshot = await new Promise(resolve => {
+          onValue(locsRef, resolve, { onlyOnce: true });
+        });
+        const allLocs = snapshot.val() || {};
+
+        Object.entries(allLocs).forEach(([locId, loc]) => {
+          if (loc.shelf.id === shelfId && loc.position.row === row && loc.position.col === col) {
+            remove(ref(database, `locations/${locId}`));
+            console.log('🗑️ Removido do Firebase:', locId);
+          }
+        });
+        return;
+      }
+
+      // Salvar cada cor como uma localização
+      const currentShelf = shelves.find(s => s.id === shelfId);
+      if (!currentShelf) return;
+
+      productData.colors.forEach(async (color) => {
+        const locationData = {
+          sku: productData.sku,
+          color: color.code,
+          quantity: color.quantity,
+          unit: productData.unit || 'unidades',
+          shelf: {
+            id: currentShelf.id,
+            name: currentShelf.name,
+            corridor: currentShelf.corridor || currentShelf.name[0]
+          },
+          position: {
+            row: row,
+            col: col,
+            label: `L${currentShelf.rows - row}:C${col + 1}`
+          },
+          metadata: {
+            created_at: Date.now(),
+            updated_at: Date.now(),
+            created_by: user.id,
+            updated_by: user.id
+          }
+        };
+
+        // Criar novo location ID
+        const newLocRef = push(ref(database, 'locations'));
+        await set(newLocRef, locationData);
+        console.log('✅ Salvo no Firebase:', newLocRef.key);
+      });
+
+    } catch (error) {
+      console.error('❌ Erro ao salvar no Firebase:', error);
+    }
+  };
+
   const saveProduct = () => {
     const oldProduct = (products || {})[editingPosition.key];
     
@@ -1502,6 +1564,16 @@ const StockControlApp = () => {
           color
         );
       });
+    }
+    
+    // Salvar no Firebase
+    if (editingPosition && currentShelf) {
+      saveProductToFirebase(
+        currentShelf.id,
+        editingPosition.row,
+        editingPosition.col,
+        editingProduct
+      );
     }
     setShowEditProduct(false);
     setEditingProduct(null);
