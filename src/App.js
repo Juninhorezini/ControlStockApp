@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Search, Plus, Edit, Trash2, Package, MapPin, Grid, Save, X, Minus, Shield, Settings, Lock, User, ChevronDown } from 'lucide-react';
-import { useFirebaseSync } from './hooks/useFirebase';
+import { database, ref, onValue } from './firebaseConfig';
 
 
 // Hook personalizado para substituir useStoredState do Hatchcanvas
@@ -36,8 +36,6 @@ const useStoredState = (key, initialValue) => {
 
 
 const StockControlApp = () => {
-  // Firebase real-time sync
-  const firebase = useFirebaseSync();
   const [firebaseSynced, setFirebaseSynced] = useState(false);
 
   // Mock user object for standalone version
@@ -865,30 +863,57 @@ const StockControlApp = () => {
   }, []);
 
 
-  // Firebase sync effect
+  // Firebase sync - DIRETO E SIMPLES
   useEffect(() => {
-    if (!firebaseSynced && firebase) {
-      console.log('Firebase: Iniciando sync...');
+    if (firebaseSynced) return;
 
-      const unsubShelves = firebase.syncShelves((data) => {
-        const arr = Object.values(data);
-        if (arr.length > 0) setShelves(arr);
+    console.log('🔥 Firebase: Conectando...');
+
+    try {
+      // Sync shelves
+      const shelvesRef = ref(database, 'shelves');
+      const unsubShelves = onValue(shelvesRef, (snapshot) => {
+        const data = snapshot.val();
+        if (data) {
+          const arr = Object.values(data);
+          setShelves(arr);
+          console.log(`✅ ${arr.length} prateleiras carregadas`);
+        }
       });
 
-      const unsubLocs = firebase.syncLocations((locs) => {
+      // Sync locations -> products
+      const locsRef = ref(database, 'locations');
+      const unsubLocs = onValue(locsRef, (snapshot) => {
+        const locs = snapshot.val() || {};
         const prods = {};
+
         Object.entries(locs).forEach(([id, loc]) => {
-          const key = loc.shelf.id + '-' + loc.position.row + '-' + loc.position.col;
-          if (!prods[key]) prods[key] = { sku: loc.sku, unit: loc.unit, colors: [] };
+          const key = `${loc.shelf.id}-${loc.position.row}-${loc.position.col}`;
+          if (!prods[key]) {
+            prods[key] = { 
+              sku: loc.sku, 
+              unit: loc.unit, 
+              colors: [],
+              lastModified: new Date(loc.metadata.updated_at).toISOString(),
+              modifiedBy: loc.metadata.updated_by
+            };
+          }
           prods[key].colors.push({ code: loc.color, quantity: loc.quantity });
         });
+
         setProducts(prods);
         setFirebaseSynced(true);
+        console.log(`✅ ${Object.keys(locs).length} localizações carregadas`);
       });
 
-      return () => { unsubShelves(); unsubLocs(); };
+      return () => {
+        unsubShelves();
+        unsubLocs();
+      };
+    } catch (err) {
+      console.error('❌ Firebase erro:', err);
     }
-  }, [firebaseSynced, firebase]);
+  }, [firebaseSynced]);
 
   // Inicializar dados se necessário
   useEffect(() => {
