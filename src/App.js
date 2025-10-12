@@ -915,7 +915,7 @@ const StockControlApp = () => {
     } catch (err) {
       console.error('❌ Firebase erro:', err);
     }
-  }, [firebaseSynced]);
+  }, []);
 
   // Inicializar dados se necessário
   useEffect(() => {
