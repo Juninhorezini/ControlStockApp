@@ -411,27 +411,32 @@ const StockControlApp = () => {
 
   
   // Função para sincronizar produto específico com Google Sheets
-  const syncSingleProductWithSheets = async (sku, color = '') => {
+  const syncSingleProductWithSheets = async (sku, color = '', forceQuantity = null) => {
     if (!sheetsUrl) return;
 
     try {
       console.log('🔄 Sync Individual - SKU:', sku, 'COR:', color);
 
-      // Calculate total quantity directly from products
-      let totalQuantity = 0;
-      Object.values(products).forEach(product => {
-        if (product.sku === sku && product.colors) {
-          product.colors.forEach(c => {
-            if (c.code === color) {
-              totalQuantity += c.quantity || 0;
-            }
-          });
-        }
-      });
+      // Se quantidade foi passada explicitamente, use ela
+      let totalQuantity = forceQuantity;
 
-      console.log('📊 Quantidade total calculada:', totalQuantity);
+      // Caso contrário, calcule do localStorage
+      if (totalQuantity === null) {
+        const storedProducts = JSON.parse(localStorage.getItem('products') || '{}');
+        totalQuantity = 0;
+        Object.values(storedProducts).forEach(product => {
+          if (product.sku === sku && product.colors) {
+            product.colors.forEach(c => {
+              if (c.code === color) {
+                totalQuantity += c.quantity || 0;
+              }
+            });
+          }
+        });
+      }
 
-      // Build GET URL with parameters
+      console.log('📊 Quantidade total:', totalQuantity);
+
       const params = new URLSearchParams({
         action: 'updateSingleProduct',
         sku: sku.trim(),
@@ -439,20 +444,13 @@ const StockControlApp = () => {
         quantidade: totalQuantity
       });
 
-      const url = `${sheetsUrl}?${params.toString()}`;
-
-      // Use Image tag to avoid CORS (fire-and-forget)
       const img = new Image();
-      img.src = url;
+      img.src = `${sheetsUrl}?${params.toString()}`;
 
-      console.log('📤 Dados enviados para Google Sheets (via GET):', {
-        sku: sku.trim(),
-        color: color.trim(),
-        quantidade: totalQuantity
-      });
+      console.log('📤 Enviado:', {sku, color, quantidade: totalQuantity});
 
     } catch (error) {
-      console.error('❌ Erro ao sincronizar produto:', error);
+      console.error('❌ Erro ao sincronizar produto individual:', error);
     }
   };
 
@@ -1337,7 +1335,7 @@ const StockControlApp = () => {
         // Sincronizar com Google Sheets - todas as cores do produto
         if (sheetsUrl) {
           validColors.forEach(color => {
-            syncSingleProductWithSheets(updatedProduct.sku, color.code);
+            syncSingleProductWithSheets(updatedProduct.sku, color.code, color.quantity);
           });
         }
         
