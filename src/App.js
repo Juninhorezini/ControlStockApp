@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Search, Plus, Edit, Trash2, Package, MapPin, Grid, Save, X, Minus, Shield, Settings, Lock, User, ChevronDown } from 'lucide-react';
+import { useFirebaseSync } from './hooks/useFirebase';
 
 
 // Hook personalizado para substituir useStoredState do Hatchcanvas
@@ -35,6 +36,10 @@ const useStoredState = (key, initialValue) => {
 
 
 const StockControlApp = () => {
+  // Firebase real-time sync
+  const firebase = useFirebaseSync();
+  const [firebaseSynced, setFirebaseSynced] = useState(false);
+
   // Mock user object for standalone version
   const user = {
     id: 'local-user-' + Math.random().toString(36).substr(2, 9),
@@ -858,6 +863,32 @@ const StockControlApp = () => {
     
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
+
+
+  // Firebase sync effect
+  useEffect(() => {
+    if (!firebaseSynced && firebase) {
+      console.log('Firebase: Iniciando sync...');
+
+      const unsubShelves = firebase.syncShelves((data) => {
+        const arr = Object.values(data);
+        if (arr.length > 0) setShelves(arr);
+      });
+
+      const unsubLocs = firebase.syncLocations((locs) => {
+        const prods = {};
+        Object.entries(locs).forEach(([id, loc]) => {
+          const key = loc.shelf.id + '-' + loc.position.row + '-' + loc.position.col;
+          if (!prods[key]) prods[key] = { sku: loc.sku, unit: loc.unit, colors: [] };
+          prods[key].colors.push({ code: loc.color, quantity: loc.quantity });
+        });
+        setProducts(prods);
+        setFirebaseSynced(true);
+      });
+
+      return () => { unsubShelves(); unsubLocs(); };
+    }
+  }, [firebaseSynced, firebase]);
 
   // Inicializar dados se necessário
   useEffect(() => {
