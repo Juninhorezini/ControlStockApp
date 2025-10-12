@@ -1496,16 +1496,7 @@ const StockControlApp = () => {
   };
 
 
-  // Helper: Save location to Firebase
-  const saveLocationToFirebase = async (locationId, locationData) => {
-    try {
-      const locRef = ref(database, `locations/${locationId}`);
-      await set(locRef, locationData);
-      console.log(`✅ Firebase: Salvo ${locationId}`);
-    } catch (err) {
-      console.error('❌ Firebase save error:', err);
-    }
-  };
+  
 
   // Helper: Delete location from Firebase
   const deleteLocationFromFirebase = async (locationId) => {
@@ -1519,46 +1510,7 @@ const StockControlApp = () => {
   };
 
 
-  // Helper: Salvar localização no Firebase
-  const saveLocationToFirebase = async (shelfId, row, col, product, color) => {
-    try {
-      const locationId = `loc_${shelfId}_${row}_${col}_${color.code}`;
-      const locationRef = ref(database, `locations/${locationId}`);
-
-      const shelf = shelves.find(s => s.id === shelfId);
-      if (!shelf) return;
-
-      const locationData = {
-        sku: product.sku,
-        color: color.code,
-        quantity: color.quantity,
-        unit: product.unit,
-        shelf: {
-          id: shelfId,
-          name: shelf.name,
-          corridor: shelf.corridor || shelf.name[0]
-        },
-        position: {
-          row: row,
-          col: col,
-          label: `L${shelf.rows - row}:C${col + 1}`
-        },
-        metadata: {
-          created_at: Date.now(),
-          updated_at: Date.now(),
-          created_by: user.id,
-          updated_by: user.id
-        }
-      };
-
-      await set(locationRef, locationData);
-      console.log('✅ Salvo no Firebase:', locationId);
-    } catch (error) {
-      console.error('❌ Erro ao salvar no Firebase:', error);
-    }
-  };
-
-  // Helper: Deletar localização do Firebase
+  
   const deleteLocationFromFirebase = async (shelfId, row, col, colorCode) => {
     try {
       const locationId = `loc_${shelfId}_${row}_${col}_${colorCode}`;
