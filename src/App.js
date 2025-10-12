@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Search, Plus, Edit, Trash2, Package, MapPin, Grid, Save, X, Minus, Shield, Settings, Lock, User, ChevronDown } from 'lucide-react';
-import { database, ref, onValue } from './firebaseConfig';
+import { database, ref, onValue, set, update, push, remove } from './firebaseConfig';
 
 
 // Hook personalizado para substituir useStoredState do Hatchcanvas
@@ -1364,6 +1364,75 @@ const StockControlApp = () => {
     });
   };
 
+
+  // Helper: Save location to Firebase
+  const saveLocationToFirebase = async (shelfId, row, col, product, color) => {
+    try {
+      const shelf = shelves.find(s => s.id === shelfId);
+      if (!shelf) return;
+
+      // Buscar se já existe location com esse SKU+Color nessa posição
+      const locationsRef = ref(database, 'locations');
+      const snapshot = await new Promise((resolve) => {
+        onValue(locationsRef, resolve, { onlyOnce: true });
+      });
+
+      const locations = snapshot.val() || {};
+      let locationId = null;
+
+      // Procurar location existente
+      for (const [id, loc] of Object.entries(locations)) {
+        if (loc.shelf.id === shelfId && 
+            loc.position.row === row && 
+            loc.position.col === col &&
+            loc.sku === product.sku &&
+            loc.color === color.code) {
+          locationId = id;
+          break;
+        }
+      }
+
+      if (color.quantity === 0 && locationId) {
+        // Delete se quantidade = 0
+        await remove(ref(database, `locations/${locationId}`));
+        console.log('🗑️ Firebase: Location removida');
+      } else if (color.quantity > 0) {
+        // Update ou Create
+        if (!locationId) {
+          locationId = push(ref(database, 'locations')).key;
+        }
+
+        const locationData = {
+          sku: product.sku,
+          color: color.code,
+          quantity: color.quantity,
+          unit: product.unit || 'unidades',
+          shelf: {
+            id: shelfId,
+            name: shelf.name,
+            corridor: shelf.corridor || shelf.name[0]
+          },
+          position: {
+            row: row,
+            col: col,
+            label: `L${shelf.rows - row}:C${col + 1}`
+          },
+          metadata: {
+            created_at: Date.now(),
+            updated_at: Date.now(),
+            created_by: user.id,
+            updated_by: user.id
+          }
+        };
+
+        await set(ref(database, `locations/${locationId}`), locationData);
+        console.log('💾 Firebase: Location salva');
+      }
+    } catch (err) {
+      console.error('❌ Firebase save error:', err);
+    }
+  };
+
   const saveProduct = () => {
     const oldProduct = (products || {})[editingPosition.key];
     
@@ -1418,6 +1487,21 @@ const StockControlApp = () => {
           });
         }
       }
+    }
+
+
+    // Sync com Firebase
+    if (editingPosition && currentShelf) {
+      const validColors = editingProduct.colors?.filter(c => c.code && c.code.trim()) || [];
+      validColors.forEach(color => {
+        saveLocationToFirebase(
+          currentShelf.id,
+          editingPosition.row,
+          editingPosition.col,
+          editingProduct,
+          color
+        );
+      });
     }
     setShowEditProduct(false);
     setEditingProduct(null);
