@@ -420,12 +420,18 @@ const StockControlApp = () => {
       // Se quantidade foi passada explicitamente, use ela
       let totalQuantity = forceQuantity;
 
-      // Caso contrário, calcule do localStorage
+      // Caso contrário, calcule do localStorage SOMANDO TODAS AS POSIÇÕES
       if (totalQuantity === null) {
         const storedProducts = JSON.parse(localStorage.getItem('products') || '{}');
         totalQuantity = 0;
-        Object.values(storedProducts).forEach(product => {
-          if (product.sku === sku && product.colors) {
+
+        // CORREÇÃO: Percorrer TODAS as chaves do localStorage
+        Object.keys(storedProducts).forEach(key => {
+          const product = storedProducts[key];
+
+          // Verificar se é o mesmo SKU
+          if (product && product.sku === sku && product.colors) {
+            // Somar quantidades de todas as cores que batem
             product.colors.forEach(c => {
               if (c.code === color) {
                 totalQuantity += c.quantity || 0;
@@ -435,7 +441,7 @@ const StockControlApp = () => {
         });
       }
 
-      console.log('📊 Quantidade total:', totalQuantity);
+      console.log('📊 Quantidade total (todas posições):', totalQuantity);
 
       const params = new URLSearchParams({
         action: 'updateSingleProduct',
