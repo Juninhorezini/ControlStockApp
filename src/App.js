@@ -36,7 +36,7 @@ const useStoredState = (key, initialValue) => {
 
 
 const StockControlApp = () => {
-  const [firebaseSynced, setFirebaseSynced] = useState(false);
+  // Firebase listeners são sempre ativos
 
   // Mock user object for standalone version
   const user = {
@@ -865,7 +865,7 @@ const StockControlApp = () => {
 
   // Firebase sync - DIRETO E SIMPLES
   useEffect(() => {
-    if (firebaseSynced) return;
+    // Listeners sempre ativos - sem flag
 
     console.log('🔥 Firebase: Conectando...');
 
@@ -904,7 +904,7 @@ const StockControlApp = () => {
 
         console.log('📦 setProducts chamado! Produtos:', Object.keys(prods).length);
         setProducts(prods);
-        setFirebaseSynced(true);
+        // Firebase synced
         console.log(`✅ ${Object.keys(locs).length} localizações carregadas`);
       });
 
