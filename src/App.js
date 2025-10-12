@@ -1317,11 +1317,13 @@ const StockControlApp = () => {
       delete newProducts[editingPosition.key];
       setProducts(newProducts);
       
-      // Sincronizar remoção com Google Sheets
+      // Sincronizar remoção com Google Sheets - ESPERAR localStorage atualizar
       if (sheetsUrl && oldProduct && oldProduct.colors) {
-        oldProduct.colors.forEach(color => {
-          syncSingleProductWithSheets(oldProduct.sku, color.code);
-        });
+        setTimeout(() => {
+          oldProduct.colors.forEach(color => {
+            syncSingleProductWithSheets(oldProduct.sku, color.code);
+          });
+        }, 100);
       }
     } else {
       const validColors = editingProduct.colors.filter(color => color.code && color.code.trim() !== '');
@@ -1338,11 +1340,14 @@ const StockControlApp = () => {
           [editingPosition.key]: updatedProduct
         });
         
-        // Sincronizar com Google Sheets - todas as cores do produto
+        // Sincronizar com Google Sheets - ESPERAR localStorage atualizar
         if (sheetsUrl) {
-          validColors.forEach(color => {
-            syncSingleProductWithSheets(updatedProduct.sku, color.code);
+          setTimeout(() => {
+            validColors.forEach(color => {
+              syncSingleProductWithSheets(updatedProduct.sku, color.code);
           });
+        }
+          }, 100);
         }
         
         // Se o produto antigo tinha cores diferentes, também sincronizar para remover
@@ -1351,6 +1356,9 @@ const StockControlApp = () => {
             const stillExists = validColors.some(newColor => newColor.code === oldColor.code);
             if (!stillExists) {
               syncSingleProductWithSheets(oldProduct.sku, oldColor.code);
+              setTimeout(() => {
+                syncSingleProductWithSheets(oldProduct.sku, oldColor.code);
+              }, 100);
             }
           });
         }
