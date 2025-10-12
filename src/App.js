@@ -1341,7 +1341,7 @@ const StockControlApp = () => {
         // Sincronizar com Google Sheets - todas as cores do produto
         if (sheetsUrl) {
           validColors.forEach(color => {
-            syncSingleProductWithSheets(updatedProduct.sku, color.code, color.quantity);
+            syncSingleProductWithSheets(updatedProduct.sku, color.code);
           });
         }
         
