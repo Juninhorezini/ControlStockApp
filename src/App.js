@@ -1497,7 +1497,6 @@ const StockControlApp = () => {
 
 
   
-
   // Helper: Delete location from Firebase
   const deleteLocationFromFirebase = async (locationId) => {
     try {
@@ -1511,92 +1510,24 @@ const StockControlApp = () => {
 
 
   
-  const deleteLocationFromFirebase = async (shelfId, row, col, colorCode) => {
-    try {
-      const locationId = `loc_${shelfId}_${row}_${col}_${colorCode}`;
-      const locationRef = ref(database, `locations/${locationId}`);
-      await remove(locationRef);
-      console.log('🗑️ Deletado do Firebase:', locationId);
-    } catch (error) {
-      console.error('❌ Erro ao deletar do Firebase:', error);
-    }
-  };
-  const saveProduct = async () => {
-    const oldProduct = (products || {})[editingPosition.key];
-    
-    if (!editingProduct.sku.trim() || !editingProduct.colors || editingProduct.colors.length === 0) {
-      // Removendo produto
-      const newProducts = { ...(products || {}) };
-      delete newProducts[editingPosition.key];
-      setProducts(newProducts);
-      
-      // Sincronizar remoção com Google Sheets - ESPERAR localStorage atualizar
-      if (sheetsUrl && oldProduct && oldProduct.colors) {
-        setTimeout(() => {
-          oldProduct.colors.forEach(color => {
-            syncSingleProductWithSheets(oldProduct.sku, color.code);
-          });
-        }, 100);
-      }
-    } else {
-      const validColors = editingProduct.colors.filter(color => color.code && color.code.trim() !== '');
-      if (validColors.length > 0) {
-        const updatedProduct = {
-          ...editingProduct,
-          colors: validColors,
-          lastModified: new Date().toISOString(),
-          modifiedBy: user.id
-        };
-        
-        setProducts({
-          ...(products || {}),
-          [editingPosition.key]: updatedProduct
-        });
-        
-        // Sincronizar com Google Sheets - ESPERAR localStorage atualizar
-        if (sheetsUrl) {
-          setTimeout(() => {
-            validColors.forEach(color => {
-              syncSingleProductWithSheets(updatedProduct.sku, color.code);
-            });
-          }, 100);
-        }
-        
-        // Se o produto antigo tinha cores diferentes, também sincronizar para remover
-        if (oldProduct && oldProduct.colors) {
-          oldProduct.colors.forEach(oldColor => {
-            const stillExists = validColors.some(newColor => newColor.code === oldColor.code);
-            if (!stillExists) {
-              syncSingleProductWithSheets(oldProduct.sku, oldColor.code);
-              setTimeout(() => {
-                syncSingleProductWithSheets(oldProduct.sku, oldColor.code);
-              }, 100);
-            }
-          });
-        }
-      }
-    }
-
-
+  
     // Sync com Firebase
     if (editingPosition && currentShelf) {
       const validColors = editingProduct.colors?.filter(c => c.code && c.code.trim()) || [];
-      await Promise.all(
-        validColors.map(color =>
-          saveLocationToFirebase(
-            currentShelf.id,
-            editingPosition.row,
-            editingPosition.col,
-            editingProduct,
-            color
-          )
-        )
-      );
+      validColors.forEach(color => {
+        saveLocationToFirebase(
+          currentShelf.id,
+          editingPosition.row,
+          editingPosition.col,
+          editingProduct,
+          color
+        );
+      });
     }
-
+    
     // Salvar no Firebase
     if (editingPosition && currentShelf) {
-      await saveProductToFirebase(
+      saveProductToFirebase(
         currentShelf.id,
         editingPosition.row,
         editingPosition.col,
