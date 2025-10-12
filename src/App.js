@@ -1569,7 +1569,7 @@ const StockControlApp = () => {
       console.error('❌ Erro ao deletar do Firebase:', error);
     }
   };
-  const saveProduct = () => {
+  const saveProduct = async () => {
     const oldProduct = (products || {})[editingPosition.key];
     
     if (!editingProduct.sku.trim() || !editingProduct.colors || editingProduct.colors.length === 0) {
@@ -1629,20 +1629,22 @@ const StockControlApp = () => {
     // Sync com Firebase
     if (editingPosition && currentShelf) {
       const validColors = editingProduct.colors?.filter(c => c.code && c.code.trim()) || [];
-      validColors.forEach(color => {
-        saveLocationToFirebase(
-          currentShelf.id,
-          editingPosition.row,
-          editingPosition.col,
-          editingProduct,
-          color
-        );
-      });
+      await Promise.all(
+        validColors.map(color =>
+          saveLocationToFirebase(
+            currentShelf.id,
+            editingPosition.row,
+            editingPosition.col,
+            editingProduct,
+            color
+          )
+        )
+      );
     }
-    
+
     // Salvar no Firebase
     if (editingPosition && currentShelf) {
-      saveProductToFirebase(
+      await saveProductToFirebase(
         currentShelf.id,
         editingPosition.row,
         editingPosition.col,
