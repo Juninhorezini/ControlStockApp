@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Search, Plus, Edit, Trash2, Package, MapPin, Grid, Save, X, Minus, Shield, Settings, Lock, User, ChevronDown } from 'lucide-react';
-import { database, ref, onValue, set, update, push, remove } from './firebaseConfig';
+import { database, ref, onValue, set, update, push, remove , get, onChildAdded, onChildChanged, onChildRemoved} from './firebaseConfig';
 
 
 // Hook personalizado para substituir useStoredState do Hatchcanvas
@@ -863,33 +863,31 @@ const StockControlApp = () => {
   }, []);
 
 
-  // Firebase sync - DIRETO E SIMPLES
+  // Firebase sync - OTIMIZADO (Child Listeners = 99% menos bandwidth)
   useEffect(() => {
-    // Listeners sempre ativos - sem flag
-
-    console.log('🔥 Firebase: Conectando...');
+    console.log('Firebase: Conectando com child listeners...');
 
     try {
-      // Sync shelves
+      // Sync shelves (onValue OK - shelves mudam pouco)
       const shelvesRef = ref(database, 'shelves');
       const unsubShelves = onValue(shelvesRef, (snapshot) => {
         const data = snapshot.val();
         if (data) {
-          const arr = Object.values(data);
-          setShelves(arr);
-          console.log(`✅ ${arr.length} prateleiras carregadas`);
+          setShelves(Object.values(data));
+          console.log('Prateleiras carregadas:', Object.values(data).length);
         }
       });
 
-      // Sync locations -> products
+      // Locations: get inicial + child listeners (OTIMIZADO)
       const locsRef = ref(database, 'locations');
-      const unsubLocs = onValue(locsRef, (snapshot) => {
-        console.log('🔥🔥🔥 FIREBASE MUDOU! Timestamp:', Date.now());
+
+      // 1. Carga inicial (uma vez)
+      get(locsRef).then((snapshot) => {
         const locs = snapshot.val() || {};
         const prods = {};
 
         Object.entries(locs).forEach(([id, loc]) => {
-          const key = `${loc.shelf.id}-${loc.position.row}-${loc.position.col}`;
+          const key = loc.shelf.id + '-' + loc.position.row + '-' + loc.position.col;
           if (!prods[key]) {
             prods[key] = { 
               sku: loc.sku, 
@@ -902,20 +900,89 @@ const StockControlApp = () => {
           prods[key].colors.push({ code: loc.color, quantity: loc.quantity });
         });
 
-        console.log('📦 setProducts chamado! Produtos:', Object.keys(prods).length);
+        console.log('setProducts chamado! Produtos:', Object.keys(prods).length);
         setProducts(prods);
-        // Firebase synced
-        console.log(`✅ ${Object.keys(locs).length} localizações carregadas`);
+        console.log('Localizacoes carregadas:', Object.keys(locs).length);
+      });
+
+      // 2. Child listeners (apenas mudancas = ~400 bytes cada)
+
+      const unsubAdded = onChildAdded(locsRef, (snapshot) => {
+        const loc = snapshot.val();
+        const key = loc.shelf.id + '-' + loc.position.row + '-' + loc.position.col;
+
+        setProducts(prev => {
+          const newProds = { ...prev };
+          if (!newProds[key]) {
+            newProds[key] = {
+              sku: loc.sku,
+              unit: loc.unit,
+              colors: [],
+              lastModified: new Date(loc.metadata.updated_at).toISOString(),
+              modifiedBy: loc.metadata.updated_by
+            };
+          }
+
+          const colorIndex = newProds[key].colors.findIndex(c => c.code === loc.color);
+          if (colorIndex >= 0) {
+            newProds[key].colors[colorIndex] = { code: loc.color, quantity: loc.quantity };
+          } else {
+            newProds[key].colors.push({ code: loc.color, quantity: loc.quantity });
+          }
+
+          return newProds;
+        });
+
+        console.log('Location adicionada:', snapshot.key);
+      });
+
+      const unsubChanged = onChildChanged(locsRef, (snapshot) => {
+        const loc = snapshot.val();
+        const key = loc.shelf.id + '-' + loc.position.row + '-' + loc.position.col;
+
+        setProducts(prev => {
+          const newProds = { ...prev };
+          if (newProds[key]) {
+            const colorIndex = newProds[key].colors.findIndex(c => c.code === loc.color);
+            if (colorIndex >= 0) {
+              newProds[key].colors[colorIndex] = { code: loc.color, quantity: loc.quantity };
+              newProds[key].lastModified = new Date(loc.metadata.updated_at).toISOString();
+            }
+          }
+          return newProds;
+        });
+
+        console.log('Location modificada:', snapshot.key);
+      });
+
+      const unsubRemoved = onChildRemoved(locsRef, (snapshot) => {
+        const loc = snapshot.val();
+        const key = loc.shelf.id + '-' + loc.position.row + '-' + loc.position.col;
+
+        setProducts(prev => {
+          const newProds = { ...prev };
+          if (newProds[key]) {
+            newProds[key].colors = newProds[key].colors.filter(c => c.code !== loc.color);
+            if (newProds[key].colors.length === 0) {
+              delete newProds[key];
+            }
+          }
+          return newProds;
+        });
+
+        console.log('Location removida:', snapshot.key);
       });
 
       return () => {
         unsubShelves();
-        unsubLocs();
+        unsubAdded();
+        unsubChanged();
+        unsubRemoved();
       };
     } catch (err) {
-      console.error('❌ Firebase erro:', err);
+      console.error('Firebase erro:', err);
     }
-  }, []);
+  }, [])
 
   // Inicializar dados se necessário
   useEffect(() => {
