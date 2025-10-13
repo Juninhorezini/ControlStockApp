@@ -1,7 +1,6 @@
 // Firebase Configuration
 import { initializeApp } from 'firebase/app';
-import { getDatabase, ref, onValue, set, update, remove, runTransaction, push } from 'firebase/database';
-
+import { getDatabase, ref, onValue, set, update, remove, runTransaction, push, get, onChildAdded, onChildChanged, onChildRemoved } from 'firebase/database';
 const firebaseConfig = {
   apiKey: "AIzaSyAJYlIedpzXb0zUOd75caRZcSdXHPfymjQ",
   authDomain: "controlstockapp-538ba.firebaseapp.com",
@@ -16,4 +15,4 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const database = getDatabase(app);
 
-export { database, ref, onValue, set, update, remove, runTransaction, push };
+export { database, ref, onValue, set, update, remove, runTransaction, push, get, onChildAdded, onChildChanged, onChildRemoved };
