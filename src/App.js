@@ -54,13 +54,6 @@ const StockControlApp = () => {
     return <LoginPage />;
 
   // State para gerenciamento de usuários
-  const [showUserAdmin, setShowUserAdmin] = useState(false);
-  console.log("🔵 showUserAdmin state criado");
-
-  // Se está na página de admin, mostrar apenas ela
-  console.log("🔍 Verificando showUserAdmin:", showUserAdmin);
-  if (showUserAdmin) {
-    return <UserAdminPage onClose={() => setShowUserAdmin(false)} />;
   }
 
   }
@@ -158,6 +151,15 @@ const StockControlApp = () => {
   const [showSheetsModal, setShowSheetsModal] = useState(false);
   const [sheetsUrl, setSheetsUrl] = useStoredState('sheetsUrl', SHEETS_API_URL);
   const [syncStatus, setSyncStatus] = useState('');
+
+  // ✅ Gerenciamento de usuários
+  const [showUserAdmin, setShowUserAdmin] = useState(false);
+
+  // Se showUserAdmin ativo, mostrar apenas página de admin
+  if (showUserAdmin) {
+    return <UserAdminPage onClose={() => setShowUserAdmin(false)} />;
+  }
+
 
   // Sistema de permissões - CORRIGIDO
   const isAdmin = () => {
