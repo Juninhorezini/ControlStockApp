@@ -55,8 +55,10 @@ const StockControlApp = () => {
 
   // State para gerenciamento de usuários
   const [showUserAdmin, setShowUserAdmin] = useState(false);
+  console.log("🔵 showUserAdmin state criado");
 
   // Se está na página de admin, mostrar apenas ela
+  console.log("🔍 Verificando showUserAdmin:", showUserAdmin);
   if (showUserAdmin) {
     return <UserAdminPage onClose={() => setShowUserAdmin(false)} />;
   }
@@ -2408,7 +2410,7 @@ const StockControlApp = () => {
               <div className="flex items-center gap-2 text-sm text-gray-600">
               
               {/* Botão de Administração de Usuários */}
-              <UserAdminButton onClick={() => setShowUserAdmin(true)} />
+              <UserAdminButton onClick={() => { console.log("🟣 Botão Usuários clicado!"); setShowUserAdmin(true); }} />
               
               {/* Botão de Logout */}
               <LogoutButton />
