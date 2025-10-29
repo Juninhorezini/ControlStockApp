@@ -2404,6 +2404,13 @@ const StockControlApp = () => {
               
               {/* Informações do usuário */}
               <div className="flex items-center gap-2 text-sm text-gray-600">
+              
+              {/* Botão de Administração de Usuários */}
+              <UserAdminButton onClick={() => setShowUserAdmin(true)} />
+              
+              {/* Botão de Logout */}
+              <LogoutButton />
+              
                 <div className="w-3 h-3 rounded-full" style={{ backgroundColor: user.color }}></div>
                 <div className="flex flex-col min-w-0">
                   <span className="text-sm font-medium truncate">{user.name}</span>
