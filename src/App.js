@@ -1508,7 +1508,15 @@ const StockControlApp = () => {
           }
         };
 
-        await set(ref(database, `locations/${locationId}`), locationData);
+        await set(ref(database, `locations/${locationId}`), { ...locationData, ...addUserMetadata(authUser) });
+        
+        // ✅ Registrar auditoria
+        await logAuditAction({
+          user: authUser,
+          action: 'product_saved',
+          details: { sku: product.sku, color: color.name },
+          targetId: locationId
+        });
         console.log('💾 Firebase: Location salva');
       }
     } catch (err) {
@@ -1617,7 +1625,15 @@ const StockControlApp = () => {
 
         // Criar ID determinístico para evitar duplicação
         const locationId = `loc_${currentShelf.id}_${row}_${col}_${color.code}`;
-        await set(ref(database, `locations/${locationId}`), locationData);
+        await set(ref(database, `locations/${locationId}`), { ...locationData, ...addUserMetadata(authUser) });
+        
+        // ✅ Registrar auditoria
+        await logAuditAction({
+          user: authUser,
+          action: 'product_saved',
+          details: { sku: product.sku, color: color.name },
+          targetId: locationId
+        });
         console.log('✅ Salvo no Firebase:', locationId);
       }
 
