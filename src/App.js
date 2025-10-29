@@ -1506,7 +1506,7 @@ const StockControlApp = () => {
           }
         };
 
-        await set(ref(database, `locations/${locationId}`), locationData);
+        await set(ref(database, `locations/${locationId}`), { ...locationData, ...addUserMetadata(authUser) });
         console.log('💾 Firebase: Location salva');
       }
     } catch (err) {
