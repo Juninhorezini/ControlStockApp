@@ -154,12 +154,7 @@ const StockControlApp = () => {
 
   // ✅ Gerenciamento de usuários
   const [showUserAdmin, setShowUserAdmin] = useState(false);
-
-  // Se showUserAdmin ativo, mostrar apenas página de admin
-  if (showUserAdmin) {
-    return <UserAdminPage onClose={() => setShowUserAdmin(false)} />;
   }
-
 
   // Sistema de permissões - CORRIGIDO
   const isAdmin = () => {
@@ -2412,7 +2407,7 @@ const StockControlApp = () => {
               <div className="flex items-center gap-2 text-sm text-gray-600">
               
               {/* Botão de Administração de Usuários */}
-              <UserAdminButton onClick={() => { console.log("🟣 Botão Usuários clicado!"); setShowUserAdmin(true); }} />
+              <UserAdminButton onClick={() => { console.log("🟣 Botão Usuários clicado!"); alert("Painel de Usuários: Acesse o Firebase Console para ver auditoria completa:\n\nhttps://console.firebase.google.com/project/controlstockapp-538ba/database/controlstockapp-538ba-default-rtdb/data/audit_log"); }} />
               
               {/* Botão de Logout */}
               <LogoutButton />
