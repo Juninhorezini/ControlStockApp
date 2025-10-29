@@ -1,13 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Plus, Edit, Trash2, Package, MapPin, Grid, Save, X, Minus, Shield, Settings, Lock, User, ChevronDown, Users } from 'lucide-react';
+import { Search, Plus, Edit, Trash2, Package, MapPin, Grid, Save, X, Minus, Shield, Settings, Lock, User, ChevronDown } from 'lucide-react';
 import { database, ref, onValue, set, update, push, remove , get, onChildAdded, onChildChanged, onChildRemoved} from './firebaseConfig';
 
-// ✅ AUTENTICAÇÃO E AUDITORIA
+// ✅ AUTENTICAÇÃO
 import { useAuth } from './hooks/useAuth';
 import { LoginPage } from './pages/LoginPage';
 import { LogoutButton } from './components/LogoutButton';
 import { logAuditAction, addUserMetadata, updateUserMetadata } from './utils/auditService';
-
 
 
 
@@ -46,15 +45,13 @@ const useStoredState = (key, initialValue) => {
 const StockControlApp = () => {
   // Firebase listeners são sempre ativos
 
-  // ✅ AUTENTICAÇÃO: Usar dados do usuário autenticado
+  // ✅ AUTENTICAÇÃO
   const { user: authUser } = useAuth();
 
-  // Se não autenticado, mostra tela de login
   if (!authUser) {
     return <LoginPage />;
   }
 
-  // Converter para formato esperado pelo app
   const user = {
     id: authUser.uid,
     name: authUser.displayName || authUser.email.split('@')[0],
@@ -1509,15 +1506,7 @@ const StockControlApp = () => {
           }
         };
 
-        await set(ref(database, `locations/${locationId}`), { ...locationData, ...addUserMetadata(authUser) });
-        
-        // ✅ Registrar auditoria
-        await logAuditAction({
-          user: authUser,
-          action: 'product_saved',
-          details: { sku: product.sku, color: color.name },
-          targetId: locationId
-        });
+        await set(ref(database, `locations/${locationId}`), locationData);
         console.log('💾 Firebase: Location salva');
       }
     } catch (err) {
@@ -1626,15 +1615,7 @@ const StockControlApp = () => {
 
         // Criar ID determinístico para evitar duplicação
         const locationId = `loc_${currentShelf.id}_${row}_${col}_${color.code}`;
-        await set(ref(database, `locations/${locationId}`), { ...locationData, ...addUserMetadata(authUser) });
-        
-        // ✅ Registrar auditoria
-        await logAuditAction({
-          user: authUser,
-          action: 'product_saved',
-          details: { sku: product.sku, color: color.name },
-          targetId: locationId
-        });
+        await set(ref(database, `locations/${locationId}`), locationData);
         console.log('✅ Salvo no Firebase:', locationId);
       }
 
@@ -4470,3 +4451,7 @@ const StockControlApp = () => {
         )}
       </div>
     </div>
+  );
+};
+
+export default StockControlApp;
