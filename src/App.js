@@ -4470,19 +4470,3 @@ const StockControlApp = () => {
         )}
       </div>
     </div>
-  );
-};
-
-
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="flex-1 overflow-auto">
-            </div>
-          </div>
-        </div>
-      )}
-
-export default StockControlApp;
