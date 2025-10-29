@@ -2,6 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { Search, Plus, Edit, Trash2, Package, MapPin, Grid, Save, X, Minus, Shield, Settings, Lock, User, ChevronDown } from 'lucide-react';
 import { database, ref, onValue, set, update, push, remove , get, onChildAdded, onChildChanged, onChildRemoved} from './firebaseConfig';
 
+// ✅ AUTENTICAÇÃO E AUDITORIA
+import { useAuth } from './hooks/useAuth';
+import { LoginPage } from './pages/LoginPage';
+import { LogoutButton } from './components/LogoutButton';
+import { logAuditAction, addUserMetadata, updateUserMetadata } from './utils/auditService';
+
+
 
 // Hook personalizado para substituir useStoredState do Hatchcanvas
 
@@ -38,14 +45,21 @@ const useStoredState = (key, initialValue) => {
 const StockControlApp = () => {
   // Firebase listeners são sempre ativos
 
-  // Mock user object for standalone version
+  // ✅ AUTENTICAÇÃO: Usar dados do usuário autenticado
+  const { user: authUser } = useAuth();
+
+  // Se não autenticado, mostra tela de login
+  if (!authUser) {
+    return <LoginPage />;
+  }
+
+  // Converter para formato esperado pelo app
   const user = {
-    id: 'local-user-' + Math.random().toString(36).substr(2, 9),
-    name: 'Usuário Local',
+    id: authUser.uid,
+    name: authUser.displayName || authUser.email.split('@')[0],
+    email: authUser.email,
     color: '#4CAF50'
   };
-
-  // User authentication removed for standalone version
   const [shelves, setShelves] = useStoredState('shelves', []);
   const [products, setProducts] = useState({});  // Firebase é a fonte da verdade
   const [selectedShelf, setSelectedShelf] = useStoredState('selectedShelf', 0);
