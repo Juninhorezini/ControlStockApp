@@ -6,9 +6,7 @@ import { database, ref, onValue, set, update, push, remove , get, onChildAdded, 
 import { useAuth } from './hooks/useAuth';
 import { LoginPage } from './pages/LoginPage';
 import { LogoutButton } from './components/LogoutButton';
-import { UserAdminButton } from './components/UserAdminButton';
 import { logAuditAction, addUserMetadata, updateUserMetadata } from './utils/auditService';
-import { UserAdminPage } from './pages/UserAdminPage';
 
 
 
@@ -52,10 +50,6 @@ const StockControlApp = () => {
 
   if (!authUser) {
     return <LoginPage />;
-
-  // State para gerenciamento de usuários
-  }
-
   }
 
   const user = {
@@ -151,10 +145,6 @@ const StockControlApp = () => {
   const [showSheetsModal, setShowSheetsModal] = useState(false);
   const [sheetsUrl, setSheetsUrl] = useStoredState('sheetsUrl', SHEETS_API_URL);
   const [syncStatus, setSyncStatus] = useState('');
-
-  // ✅ Gerenciamento de usuários
-  const [showUserAdmin, setShowUserAdmin] = useState(false);
-  }
 
   // Sistema de permissões - CORRIGIDO
   const isAdmin = () => {
@@ -2405,13 +2395,6 @@ const StockControlApp = () => {
               
               {/* Informações do usuário */}
               <div className="flex items-center gap-2 text-sm text-gray-600">
-              
-              {/* Botão de Administração de Usuários */}
-              <UserAdminButton onClick={() => { console.log("🟣 Botão Usuários clicado!"); alert("Painel de Usuários: Acesse o Firebase Console para ver auditoria completa:\n\nhttps://console.firebase.google.com/project/controlstockapp-538ba/database/controlstockapp-538ba-default-rtdb/data/audit_log"); }} />
-              
-              {/* Botão de Logout */}
-              <LogoutButton />
-              
                 <div className="w-3 h-3 rounded-full" style={{ backgroundColor: user.color }}></div>
                 <div className="flex flex-col min-w-0">
                   <span className="text-sm font-medium truncate">{user.name}</span>
