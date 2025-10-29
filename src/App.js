@@ -7,6 +7,7 @@ import { useAuth } from './hooks/useAuth';
 import { LoginPage } from './pages/LoginPage';
 import { LogoutButton } from './components/LogoutButton';
 import { logAuditAction, addUserMetadata, updateUserMetadata } from './utils/auditService';
+import { UserAdminPage } from './pages/UserAdminPage';
 
 
 
@@ -50,6 +51,12 @@ const StockControlApp = () => {
 
   if (!authUser) {
     return <LoginPage />;
+
+  // Se está na página de admin, mostrar apenas ela
+  if (showUserAdmin) {
+    return <UserAdminPage onClose={() => setShowUserAdmin(false)} />;
+  }
+
   }
 
   const user = {
@@ -77,6 +84,7 @@ const StockControlApp = () => {
   const [deleteShelfId, setDeleteShelfId] = useState(null);
   const [deletePassword, setDeletePassword] = useState('');
   const [showSecuritySettings, setShowSecuritySettings] = useState(false);
+  const [showUserAdmin, setShowUserAdmin] = useState(false);
   const [showEditShelf, setShowEditShelf] = useState(false);
   const [editingShelf, setEditingShelf] = useState(null);
   const [showEditCorridor, setShowEditCorridor] = useState(false);
