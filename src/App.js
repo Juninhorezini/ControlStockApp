@@ -53,6 +53,9 @@ const StockControlApp = () => {
   if (!authUser) {
     return <LoginPage />;
 
+  // State para gerenciamento de usuários
+  const [showUserAdmin, setShowUserAdmin] = useState(false);
+
   // Se está na página de admin, mostrar apenas ela
   if (showUserAdmin) {
     return <UserAdminPage onClose={() => setShowUserAdmin(false)} />;
@@ -85,7 +88,6 @@ const StockControlApp = () => {
   const [deleteShelfId, setDeleteShelfId] = useState(null);
   const [deletePassword, setDeletePassword] = useState('');
   const [showSecuritySettings, setShowSecuritySettings] = useState(false);
-  const [showUserAdmin, setShowUserAdmin] = useState(false);
   const [showEditShelf, setShowEditShelf] = useState(false);
   const [editingShelf, setEditingShelf] = useState(null);
   const [showEditCorridor, setShowEditCorridor] = useState(false);
