@@ -6,6 +6,7 @@ import { database, ref, onValue, set, update, push, remove , get, onChildAdded, 
 import { useAuth } from './hooks/useAuth';
 import { LoginPage } from './pages/LoginPage';
 import { LogoutButton } from './components/LogoutButton';
+import { UserAdminButton } from './components/UserAdminButton';
 import { logAuditAction, addUserMetadata, updateUserMetadata } from './utils/auditService';
 import { UserAdminPage } from './pages/UserAdminPage';
 
