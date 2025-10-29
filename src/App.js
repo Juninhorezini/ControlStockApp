@@ -4471,9 +4471,6 @@ const StockControlApp = () => {
         )}
       </div>
     </div>
-  );
-};
-
 
       {/* Modal de Gerenciamento de Usuários */}
       {showUserManagement && (
@@ -4483,6 +4480,22 @@ const StockControlApp = () => {
               <h2 className="text-xl font-bold">Gerenciamento de Usuários</h2>
               <button
                 onClick={() => setShowUserManagement(false)}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-auto">
+              <UserManagement />
+            </div>
+          </div>
+        </div>
+      )}
+
+  );
+};
+
+
                 className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
               >
                 <X className="w-5 h-5" />
