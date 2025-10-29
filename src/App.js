@@ -7,6 +7,7 @@ import { useAuth } from './hooks/useAuth';
 import { LoginPage } from './pages/LoginPage';
 import { LogoutButton } from './components/LogoutButton';
 import { logAuditAction, addUserMetadata, updateUserMetadata } from './utils/auditService';
+import { UserManagement } from './components/UserManagement';
 
 
 
@@ -79,6 +80,7 @@ const StockControlApp = () => {
   const [deleteShelfId, setDeleteShelfId] = useState(null);
   const [deletePassword, setDeletePassword] = useState('');
   const [showSecuritySettings, setShowSecuritySettings] = useState(false);
+  const [showUserManagement, setShowUserManagement] = useState(false);
   const [showEditShelf, setShowEditShelf] = useState(false);
   const [editingShelf, setEditingShelf] = useState(null);
   const [showEditCorridor, setShowEditCorridor] = useState(false);
@@ -4471,5 +4473,26 @@ const StockControlApp = () => {
     </div>
   );
 };
+
+
+      {/* Modal de Gerenciamento de Usuários */}
+      {showUserManagement && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-6xl max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between p-4 border-b">
+              <h2 className="text-xl font-bold">Gerenciamento de Usuários</h2>
+              <button
+                onClick={() => setShowUserManagement(false)}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-auto">
+              <UserManagement />
+            </div>
+          </div>
+        </div>
+      )}
 
 export default StockControlApp;
