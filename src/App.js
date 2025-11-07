@@ -425,55 +425,131 @@ const StockControlApp = () => {
 
 
   
-  // Função para sincronizar produto específico com Google Sheets
-  const syncSingleProductWithSheets = async (sku, color = '', forceQuantity = null) => {
-    if (!sheetsUrl) return;
+  // ============================================
+// SINCRONIZAÇÃO COMPLETA COM GOOGLE SHEETS
+// Versão otimizada com Prateleiras + Histórico
+// ============================================
 
+// Fila de sincronização
+const syncQueue = [];
+let isProcessingQueue = false;
+
+const processSyncQueue = async () => {
+  if (isProcessingQueue || syncQueue.length === 0) return;
+  
+  isProcessingQueue = true;
+  
+  while (syncQueue.length > 0) {
+    const syncTask = syncQueue.shift();
+    try {
+      await syncTask();
+    } catch (error) {
+      console.error('❌ Erro ao processar fila de sync:', error);
+    }
+    await new Promise(resolve => setTimeout(resolve, 500));
+  }
+  
+  isProcessingQueue = false;
+};
+
+const syncSingleProductWithSheets = async (sku, color = '', modifiedPosition = null) => {
+  if (!sheetsUrl) {
+    console.warn('⚠️ URL do Google Sheets não configurada');
+    return;
+  }
+
+  syncQueue.push(async () => {
     try {
       console.log('🔄 Sync Individual - SKU:', sku, 'COR:', color);
 
-      // Se quantidade foi passada explicitamente, use ela
-      let totalQuantity = forceQuantity;
+      // Calcular quantidade total e coletar todas as localizações
+      const storedProducts = JSON.parse(localStorage.getItem('products') || '{}');
+      let totalQuantity = 0;
+      let locations = [];
 
-      // Caso contrário, calcule do localStorage SOMANDO TODAS AS POSIÇÕES
-      if (totalQuantity === null) {
-        const storedProducts = JSON.parse(localStorage.getItem('products') || '{}');
-        totalQuantity = 0;
-
-        // CORREÇÃO: Percorrer TODAS as chaves do localStorage
-        Object.keys(storedProducts).forEach(key => {
-          const product = storedProducts[key];
-
-          // Verificar se é o mesmo SKU
-          if (product && product.sku === sku && product.colors) {
-            // Somar quantidades de todas as cores que batem
-            product.colors.forEach(c => {
-              if (c.code === color) {
-                totalQuantity += c.quantity || 0;
+      Object.keys(storedProducts).forEach(key => {
+        const product = storedProducts[key];
+        
+        if (product && product.sku === sku && product.colors) {
+          product.colors.forEach(c => {
+            if (c.code === color && c.quantity > 0) {
+              totalQuantity += c.quantity || 0;
+              
+              const [shelfId, row, col] = key.split('-').map(Number);
+              const shelf = shelves.find(s => s.id === shelfId);
+              
+              if (shelf) {
+                locations.push({
+                  corredor: shelf.corridor || shelf.name.charAt(0).toUpperCase(),
+                  prateleira: shelf.name,
+                  localizacao: `L${shelf.rows - row}:C${col + 1}`,
+                  quantidade: c.quantity || 0
+                });
               }
-            });
-          }
-        });
-      }
-
-      console.log('📊 Quantidade total (todas posições):', totalQuantity);
-
-      const params = new URLSearchParams({
-        action: 'updateSingleProduct',
-        sku: sku.trim(),
-        color: color.trim(),
-        quantidade: totalQuantity
+            }
+          });
+        }
       });
 
-      const img = new Image();
-      img.src = `${sheetsUrl}?${params.toString()}`;
+      console.log('📊 Quantidade total:', totalQuantity, '| Localizações:', locations.length);
 
-      console.log('📤 Enviado:', {sku, color, quantidade: totalQuantity});
+      // Se não há mais localizações, ainda enviar para remover da planilha
+      const dataToSend = {
+        action: 'updateProduct',
+        sku: sku.trim(),
+        cor: color.trim(),
+        quantidadeTotal: totalQuantity,
+        localizacoes: locations,
+        usuario: user.name,
+        usuarioId: user.id,
+        dataMovimentacao: new Date().toLocaleString('pt-BR', {
+          day: '2-digit',
+          month: '2-digit',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit'
+        })
+      };
+
+      console.log('📤 Enviando para Google Sheets:', dataToSend);
+
+      const response = await fetch(sheetsUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(dataToSend),
+        mode: 'no-cors'
+      });
+
+      console.log('✅ Sincronização enviada');
 
     } catch (error) {
-      console.error('❌ Erro ao sincronizar produto individual:', error);
+      console.error('❌ Erro ao sincronizar:', error);
+      
+      // Fallback com GET
+      try {
+        console.log('🔄 Tentando fallback...');
+        const params = new URLSearchParams({
+          action: 'updateProduct',
+          sku: sku.trim(),
+          cor: color.trim(),
+          quantidade: totalQuantity || 0,
+          usuario: user.name
+        });
+        
+        const img = new Image();
+        img.src = `${sheetsUrl}?${params.toString()}`;
+        console.log('📤 Fallback enviado');
+      } catch (fallbackError) {
+        console.error('❌ Fallback falhou:', fallbackError);
+      }
     }
-  };
+  });
+
+  processSyncQueue();
+};
 
   // Função para debug da planilha
   const debugSpreadsheet = async () => {
