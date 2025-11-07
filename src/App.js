@@ -452,7 +452,8 @@ const processSyncQueue = async () => {
   isProcessingQueue = false;
 };
 
-const syncSingleProductWithSheets = async (sku, color = '', modifiedPosition = null) => {
+// VERSÃO CORRIGIDA: Agora lê direto do estado products (não do localStorage)
+const syncSingleProductWithSheets = async (sku, color = '', currentProducts = null) => {
   if (!sheetsUrl) {
     console.warn('⚠️ URL do Google Sheets não configurada');
     return;
@@ -462,13 +463,19 @@ const syncSingleProductWithSheets = async (sku, color = '', modifiedPosition = n
     try {
       console.log('🔄 Sync Individual - SKU:', sku, 'COR:', color);
 
+      // CORREÇÃO: Aguardar um pouco para garantir que o estado foi atualizado
+      await new Promise(resolve => setTimeout(resolve, 300));
+
       // Calcular quantidade total e coletar todas as localizações
-      const storedProducts = JSON.parse(localStorage.getItem('products') || '{}');
+      // IMPORTANTE: Usar currentProducts se fornecido, caso contrário usar localStorage
+      const productsToUse = currentProducts || JSON.parse(localStorage.getItem('products') || '{}');
       let totalQuantity = 0;
       let locations = [];
 
-      Object.keys(storedProducts).forEach(key => {
-        const product = storedProducts[key];
+      console.log('📦 Total de produtos no estado:', Object.keys(productsToUse).length);
+
+      Object.keys(productsToUse).forEach(key => {
+        const product = productsToUse[key];
         
         if (product && product.sku === sku && product.colors) {
           product.colors.forEach(c => {
@@ -485,6 +492,7 @@ const syncSingleProductWithSheets = async (sku, color = '', modifiedPosition = n
                   localizacao: `L${shelf.rows - row}:C${col + 1}`,
                   quantidade: c.quantity || 0
                 });
+                console.log(`  ↳ Encontrado em: ${shelf.name} - L${shelf.rows - row}:C${col + 1} - Qtd: ${c.quantity}`);
               }
             }
           });
@@ -523,7 +531,7 @@ const syncSingleProductWithSheets = async (sku, color = '', modifiedPosition = n
         mode: 'no-cors'
       });
 
-      console.log('✅ Sincronização enviada');
+      console.log('✅ Sincronização enviada com sucesso');
 
     } catch (error) {
       console.error('❌ Erro ao sincronizar:', error);
@@ -1778,93 +1786,93 @@ const syncSingleProductWithSheets = async (sku, color = '', modifiedPosition = n
 
 
   
-  const saveProduct = async () => {
-    const oldProduct = (products || {})[editingPosition.key];
+const saveProduct = async () => {
+  const oldProduct = (products || {})[editingPosition.key];
+  
+  if (!editingProduct.sku.trim() || !editingProduct.colors || editingProduct.colors.length === 0) {
+    // Removendo produto
+    const newProducts = { ...(products || {}) };
+    delete newProducts[editingPosition.key];
+    setProducts(newProducts);
     
-    if (!editingProduct.sku.trim() || !editingProduct.colors || editingProduct.colors.length === 0) {
-      // Removendo produto
-      const newProducts = { ...(products || {}) };
-      delete newProducts[editingPosition.key];
+    // CORREÇÃO: Passar o estado newProducts diretamente
+    if (sheetsUrl && oldProduct && oldProduct.colors) {
+      setTimeout(() => {
+        oldProduct.colors.forEach(color => {
+          syncSingleProductWithSheets(oldProduct.sku, color.code, newProducts);
+        });
+      }, 500); // Aumentado para 500ms
+    }
+  } else {
+    const validColors = editingProduct.colors.filter(color => color.code && color.code.trim() !== '');
+    if (validColors.length > 0) {
+      const updatedProduct = {
+        ...editingProduct,
+        colors: validColors,
+        lastModified: new Date().toISOString(),
+        modifiedBy: user.id
+      };
+      
+      const newProducts = {
+        ...(products || {}),
+        [editingPosition.key]: updatedProduct
+      };
+      
       setProducts(newProducts);
       
-      // Sincronizar remoção com Google Sheets - ESPERAR localStorage atualizar
-      if (sheetsUrl && oldProduct && oldProduct.colors) {
+      // CORREÇÃO: Passar o estado newProducts diretamente
+      if (sheetsUrl) {
         setTimeout(() => {
-          oldProduct.colors.forEach(color => {
-            syncSingleProductWithSheets(oldProduct.sku, color.code);
+          validColors.forEach(color => {
+            syncSingleProductWithSheets(updatedProduct.sku, color.code, newProducts);
           });
-        }, 100);
+        }, 500); // Aumentado para 500ms
       }
-    } else {
-      const validColors = editingProduct.colors.filter(color => color.code && color.code.trim() !== '');
-      if (validColors.length > 0) {
-        const updatedProduct = {
-          ...editingProduct,
-          colors: validColors,
-          lastModified: new Date().toISOString(),
-          modifiedBy: user.id
-        };
-        
-        setProducts({
-          ...(products || {}),
-          [editingPosition.key]: updatedProduct
+      
+      // Se o produto antigo tinha cores diferentes, também sincronizar para remover
+      if (oldProduct && oldProduct.colors) {
+        oldProduct.colors.forEach(oldColor => {
+          const stillExists = validColors.some(newColor => newColor.code === oldColor.code);
+          if (!stillExists) {
+            setTimeout(() => {
+              syncSingleProductWithSheets(oldProduct.sku, oldColor.code, newProducts);
+            }, 500);
+          }
         });
-        
-        // Sincronizar com Google Sheets - ESPERAR localStorage atualizar
-        if (sheetsUrl) {
-          setTimeout(() => {
-            validColors.forEach(color => {
-              syncSingleProductWithSheets(updatedProduct.sku, color.code);
-            });
-          }, 100);
-        }
-        
-        // Se o produto antigo tinha cores diferentes, também sincronizar para remover
-        if (oldProduct && oldProduct.colors) {
-          oldProduct.colors.forEach(oldColor => {
-            const stillExists = validColors.some(newColor => newColor.code === oldColor.code);
-            if (!stillExists) {
-              syncSingleProductWithSheets(oldProduct.sku, oldColor.code);
-              setTimeout(() => {
-                syncSingleProductWithSheets(oldProduct.sku, oldColor.code);
-              }, 100);
-            }
-          });
-        }
       }
     }
+  }
 
-
-    // Sync com Firebase
-    if (editingPosition && currentShelf) {
-      const validColors = editingProduct.colors?.filter(c => c.code && c.code.trim()) || [];
-      await Promise.all(
-        validColors.map(color =>
-          saveLocationToFirebase(
-            currentShelf.id,
-            editingPosition.row,
-            editingPosition.col,
-            editingProduct,
-            color
-          )
+  // Sync com Firebase
+  if (editingPosition && currentShelf) {
+    const validColors = editingProduct.colors?.filter(c => c.code && c.code.trim()) || [];
+    await Promise.all(
+      validColors.map(color =>
+        saveLocationToFirebase(
+          currentShelf.id,
+          editingPosition.row,
+          editingPosition.col,
+          editingProduct,
+          color
         )
-      );
-    }
+      )
+    );
+  }
 
-    // Salvar no Firebase
-    if (editingPosition && currentShelf) {
-      await saveProductToFirebase(
-        currentShelf.id,
-        editingPosition.row,
-        editingPosition.col,
-        editingProduct
-      );
-    }
-    
-    setShowEditProduct(false);
-    setEditingProduct(null);
-    setEditingPosition(null);
-  };
+  // Salvar no Firebase
+  if (editingPosition && currentShelf) {
+    await saveProductToFirebase(
+      currentShelf.id,
+      editingPosition.row,
+      editingPosition.col,
+      editingProduct
+    );
+  }
+  
+  setShowEditProduct(false);
+  setEditingProduct(null);
+  setEditingPosition(null);
+};
 
   const searchProducts = () => {
     const results = [];
