@@ -876,13 +876,48 @@ const StockControlApp = () => {
 
 
   // Firebase sync - OTIMIZADO (Child Listeners = 99% menos bandwidth)
+  // Firebase sync - OTIMIZADO com detecção de inatividade
   useEffect(() => {
     console.log('Firebase: Conectando com child listeners...');
+
+    let isUserActive = true;
+    let inactivityTimer;
+    let lastUpdate = 0;
+    const UPDATE_THROTTLE = 2000; // 2 segundos
+    const INACTIVITY_TIMEOUT = 3 * 60 * 1000; // 3 minutos
+
+    // Detectar inatividade após 3 minutos
+    const resetInactivityTimer = () => {
+      clearTimeout(inactivityTimer);
+      isUserActive = true;
+
+      inactivityTimer = setTimeout(() => {
+        isUserActive = false;
+        console.log('🔥 Firebase: Usuário inativo - listeners pausados');
+        // Desconectar listeners aqui
+      }, INACTIVITY_TIMEOUT); // 3 minutos
+    };
+
+    // Event listeners de atividade
+    window.addEventListener('mousemove', resetInactivityTimer);
+    window.addEventListener('keydown', resetInactivityTimer);
+    window.addEventListener('click', resetInactivityTimer);
+    window.addEventListener('touchstart', resetInactivityTimer);
+    window.addEventListener('scroll', resetInactivityTimer);
+
+    // Setup Firebase APENAS se ativo
+    if (!isUserActive) return;
+
+    resetInactivityTimer(); // Iniciar timer
 
     try {
       // Sync shelves (onValue OK - shelves mudam pouco)
       const shelvesRef = ref(database, 'shelves');
       const unsubShelves = onValue(shelvesRef, (snapshot) => {
+        if (!isUserActive) {
+          console.log('⏸️ Shelves update ignorado - usuário inativo');
+          return;
+        }
         const data = snapshot.val();
         if (data) {
           setShelves(Object.values(data));
@@ -917,9 +952,21 @@ const StockControlApp = () => {
         console.log('Localizacoes carregadas:', Object.keys(locs).length);
       });
 
-      // 2. Child listeners (apenas mudancas = ~400 bytes cada)
+      // 2. Child listeners COM THROTTLE e verificação de inatividade
 
       const unsubAdded = onChildAdded(locsRef, (snapshot) => {
+        if (!isUserActive) {
+          console.log('⏸️ Child added ignorado - usuário inativo');
+          return;
+        }
+
+        const now = Date.now();
+        if (now - lastUpdate < UPDATE_THROTTLE) {
+          console.log('⏱️ Child added ignorado - throttle ativo');
+          return;
+        }
+        lastUpdate = now;
+
         const loc = snapshot.val();
         const key = loc.shelf.id + '-' + loc.position.row + '-' + loc.position.col;
 
@@ -949,6 +996,18 @@ const StockControlApp = () => {
       });
 
       const unsubChanged = onChildChanged(locsRef, (snapshot) => {
+        if (!isUserActive) {
+          console.log('⏸️ Child changed ignorado - usuário inativo');
+          return;
+        }
+
+        const now = Date.now();
+        if (now - lastUpdate < UPDATE_THROTTLE) {
+          console.log('⏱️ Child changed ignorado - throttle ativo');
+          return;
+        }
+        lastUpdate = now;
+
         const loc = snapshot.val();
         const key = loc.shelf.id + '-' + loc.position.row + '-' + loc.position.col;
 
@@ -968,6 +1027,11 @@ const StockControlApp = () => {
       });
 
       const unsubRemoved = onChildRemoved(locsRef, (snapshot) => {
+        if (!isUserActive) {
+          console.log('⏸️ Child removed ignorado - usuário inativo');
+          return;
+        }
+
         const loc = snapshot.val();
         const key = loc.shelf.id + '-' + loc.position.row + '-' + loc.position.col;
 
@@ -986,10 +1050,17 @@ const StockControlApp = () => {
       });
 
       return () => {
+        clearTimeout(inactivityTimer);
+        window.removeEventListener('mousemove', resetInactivityTimer);
+        window.removeEventListener('keydown', resetInactivityTimer);
+        window.removeEventListener('click', resetInactivityTimer);
+        window.removeEventListener('touchstart', resetInactivityTimer);
+        window.removeEventListener('scroll', resetInactivityTimer);
         unsubShelves();
         unsubAdded();
         unsubChanged();
         unsubRemoved();
+        console.log('✅ Firebase: Cleanup completo - listeners desconectados');
       };
     } catch (err) {
       console.error('Firebase erro:', err);
