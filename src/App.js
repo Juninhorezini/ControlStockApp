@@ -883,6 +883,7 @@ const StockControlApp = () => {
     let isUserActive = true;
     let inactivityTimer;
     let lastUpdate = 0;
+    let initialLoadComplete = false; // Flag para ignorar onChildAdded durante carga inicial
     const UPDATE_THROTTLE = 2000; // 2 segundos
     const INACTIVITY_TIMEOUT = 3 * 60 * 1000; // 3 minutos
 
@@ -950,16 +951,23 @@ const StockControlApp = () => {
         console.log('setProducts chamado! Produtos:', Object.keys(prods).length);
         setProducts(prods);
         console.log('Localizacoes carregadas:', Object.keys(locs).length);
+
+        // Marcar carga inicial como completa
+        setTimeout(() => {
+          initialLoadComplete = true;
+          console.log('✅ Carga inicial completa - onChildAdded ativo para novos itens');
+        }, 1000);
       });
 
       // 2. Child listeners COM THROTTLE e verificação de inatividade
 
       const unsubAdded = onChildAdded(locsRef, (snapshot) => {
-        if (!isUserActive) {
-          console.log('⏸️ Child added ignorado - usuário inativo');
+        // Ignorar eventos da carga inicial (já carregamos com get())
+        if (!initialLoadComplete) {
           return;
         }
 
+        // Aplicar throttle apenas para evitar spam
         const now = Date.now();
         if (now - lastUpdate < UPDATE_THROTTLE) {
           console.log('⏱️ Child added ignorado - throttle ativo');
