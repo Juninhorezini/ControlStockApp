@@ -967,15 +967,8 @@ const StockControlApp = () => {
           return;
         }
 
-        // Aplicar throttle apenas para evitar spam
-        const now = Date.now();
-        if (now - lastUpdate < UPDATE_THROTTLE) {
-          console.log('⏱️ Child added ignorado - throttle ativo');
-          return;
-        }
-        lastUpdate = now;
-
         const loc = snapshot.val();
+        console.log('➕ Child added detectado:', snapshot.key);
         const key = loc.shelf.id + '-' + loc.position.row + '-' + loc.position.col;
 
         setProducts(prev => {
@@ -1004,19 +997,8 @@ const StockControlApp = () => {
       });
 
       const unsubChanged = onChildChanged(locsRef, (snapshot) => {
-        if (!isUserActive) {
-          console.log('⏸️ Child changed ignorado - usuário inativo');
-          return;
-        }
-
-        const now = Date.now();
-        if (now - lastUpdate < UPDATE_THROTTLE) {
-          console.log('⏱️ Child changed ignorado - throttle ativo');
-          return;
-        }
-        lastUpdate = now;
-
         const loc = snapshot.val();
+        console.log('✏️ Child changed detectado:', snapshot.key);
         const key = loc.shelf.id + '-' + loc.position.row + '-' + loc.position.col;
 
         setProducts(prev => {
