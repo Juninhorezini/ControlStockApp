@@ -476,7 +476,7 @@ const syncSingleProductWithSheets = async (sku, color = '', currentProducts = nu
       
       const productsToUse = currentProducts || JSON.parse(localStorage.getItem('products') || '{}');
       let totalQuantity = 0;
-      let lastLocation = null;
+      let localizacoesArray = [];  // 🆕 Array para múltiplas localizações
 
       Object.keys(productsToUse).forEach(key => {
         const product = productsToUse[key];
@@ -487,16 +487,21 @@ const syncSingleProductWithSheets = async (sku, color = '', currentProducts = nu
               const [shelfId, row, col] = key.split('-').map(Number);
               const shelf = shelves.find(s => s.id === shelfId);
               if (shelf) {
-                lastLocation = {
+                // 🆕 Adicionar cada localização ao array
+                localizacoesArray.push({
                   corredor: shelf.corridor || shelf.name.charAt(0),
                   prateleira: shelf.name,
-                  localizacao: `L${shelf.rows - row}:C${col + 1}`
-                };
+                  localizacao: `L${shelf.rows - row}:C${col + 1}`,
+                  quantidade: c.quantity
+                });
               }
             }
           });
         }
       });
+
+      // Usar a última localização para os campos individuais
+      const lastLocation = localizacoesArray[localizacoesArray.length - 1] || {};
 
       // JSONP request via script tag
       const params = new URLSearchParams({
@@ -505,9 +510,10 @@ const syncSingleProductWithSheets = async (sku, color = '', currentProducts = nu
         cor: color.trim(),
         quantidade: totalQuantity,
         usuario: user.name,
-        corredor: lastLocation?.corredor || '',
-        prateleira: lastLocation?.prateleira || '',
-        localizacao: lastLocation?.localizacao || ''
+        corredor: lastLocation.corredor || '',
+        prateleira: lastLocation.prateleira || '',
+        localizacao: lastLocation.localizacao || '',
+        localizacoes: JSON.stringify(localizacoesArray)  // 🆕 Enviar array completo
       });
 
       const script = document.createElement('script');
