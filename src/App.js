@@ -398,19 +398,33 @@ const StockControlApp = () => {
                 if (color.quantity > 0) {
                   const key = `${product.sku}|${color.code}`;
                   
+                  // 🆕 Dados da localização atual
+                  const currentLocation = {
+                    corredor: shelf.corridor || shelf.name.charAt(0),
+                    prateleira: shelf.name,
+                    localizacao: `L${shelf.rows - row}:C${col + 1}`,
+                    quantidade: color.quantity,
+                    timestamp: product.lastModified || new Date().toISOString()
+                  };
+                  
                   if (!consolidated[key]) {
                     consolidated[key] = {
                       sku: product.sku,
                       color: color.code,
                       quantity: 0,
-                      lastModified: product.lastModified || new Date().toISOString()
+                      lastModified: product.lastModified || new Date().toISOString(),
+                      lastLocation: currentLocation,  // 🆕 Última localização
+                      localizacoes: []  // 🆕 Todas as localizações (para histórico)
                     };
                   }
                   
                   consolidated[key].quantity += color.quantity;
-                  // Manter a data mais recente
-                  if (product.lastModified && new Date(product.lastModified) > new Date(consolidated[key].lastModified)) {
-                    consolidated[key].lastModified = product.lastModified;
+                  consolidated[key].localizacoes.push(currentLocation);
+                  
+                  // Atualizar última localização se for mais recente
+                  if (new Date(currentLocation.timestamp) > new Date(consolidated[key].lastModified)) {
+                    consolidated[key].lastModified = currentLocation.timestamp;
+                    consolidated[key].lastLocation = currentLocation;
                   }
                 }
               });
@@ -600,26 +614,43 @@ const testGoogleSheetsConnection = async () => {
       setSyncStatus('Sincronizando...');
       
       const consolidatedProducts = consolidateProductsBySKUColor();
-      const productsData = consolidatedProducts.map(product => ({
-        sku: product.sku,
-        cor: product.color,
-        quantidade: product.quantity,
-        dataMovimentacao: formatDateBR(new Date(product.lastModified))
-      }));
+      
+      let successCount = 0;
+      let errorCount = 0;
+      
+      for (const product of consolidatedProducts) {
+        try {
+          // 🆕 Enviar apenas a ÚLTIMA localização para a aba Prateleiras
+          // E o array completo para registrar no Histórico
+          const params = new URLSearchParams({
+            sku: product.sku.trim(),
+            cor: product.color.trim(),
+            quantidade: product.quantity,  // Total consolidado
+            usuario: user?.name || 'App React',
+            // Dados da ÚLTIMA localização (para aba Prateleiras)
+            corredor: product.lastLocation.corredor,
+            prateleira: product.lastLocation.prateleira,
+            localizacao: product.lastLocation.localizacao,
+            // Array completo de localizações (para aba Histórico)
+            localizacoes: JSON.stringify(product.localizacoes)
+          });
 
-      await fetch(sheetsUrl, {
-        method: 'POST',
-        mode: 'no-cors',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          action: 'updateAllProducts',
-          data: productsData
-        })
-      });
+          const script = document.createElement('script');
+          script.src = `${sheetsUrl}?${params.toString()}`;
+          document.body.appendChild(script);
+          
+          await new Promise(resolve => setTimeout(resolve, 500));
+          
+          setTimeout(() => document.body.removeChild(script), 3000);
+          successCount++;
+          
+        } catch (error) {
+          console.error(`Erro ao sincronizar ${product.sku}-${product.color}:`, error);
+          errorCount++;
+        }
+      }
 
-      setSyncStatus(`Dados sincronizados com sucesso! ${productsData.length} produtos únicos enviados.`);
+      setSyncStatus(`✅ ${successCount} produtos sincronizados ${errorCount > 0 ? `| ❌ ${errorCount} erros` : ''}`);
       
       setTimeout(() => {
         setSyncStatus('');
