@@ -467,20 +467,25 @@ const processSyncQueue = async () => {
 };
 
 // VERSÃO CORRIGIDA: Agora lê direto do estado products (não do localStorage)
-const syncSingleProductWithSheets = async (sku, color = '') => {
+// Agora aceita opcionalmente um snapshot de products para evitar ler estado global
+const syncSingleProductWithSheets = async (sku, color = '', productsSnapshot = null) => {
   if (!sheetsUrl) return;
 
   syncQueue.push(async () => {
     try {
-      // 🆕 Aguardar Firebase atualizar o estado
-      await new Promise(resolve => setTimeout(resolve, 800));
-      
-      // 🆕 LER DIRETAMENTE do estado products (já atualizado pelo Firebase)
+      // Se for passado um snapshot, usar imediatamente (garante dado atual enviado)
+      const sourceProducts = productsSnapshot || products;
+
+      // Se não houver snapshot, aguardar um pequeno delay para dar tempo aos listeners
+      if (!productsSnapshot) {
+        await new Promise(resolve => setTimeout(resolve, 800));
+      }
+
       let totalQuantity = 0;
       let localizacoesArray = [];
 
-      Object.keys(products || {}).forEach(key => {
-        const product = products[key];
+      Object.keys(sourceProducts || {}).forEach(key => {
+        const product = sourceProducts[key];
         if (product?.sku === sku && product.colors) {
           product.colors.forEach(c => {
             if (c.code === color && c.quantity > 0) {
@@ -518,9 +523,9 @@ const syncSingleProductWithSheets = async (sku, color = '') => {
       const script = document.createElement('script');
       script.src = `${sheetsUrl}?${params.toString()}`;
       document.body.appendChild(script);
-      
+
       setTimeout(() => document.body.removeChild(script), 5000);
-      
+
     } catch (error) {
       console.error('❌ Sync error:', error);
     }
@@ -1838,11 +1843,12 @@ const saveProduct = async () => {
       );
     }
     
-    // 🆕 Sync APÓS Firebase confirmar (aguardar listeners atualizarem)
+    // 🆕 Sync APÓS Firebase confirmar (usar snapshot local para garantir dado atual)
     if (sheetsUrl && oldProduct && oldProduct.colors) {
       await new Promise(resolve => setTimeout(resolve, 1000));  // Aguardar listeners
       oldProduct.colors.forEach(color => {
-        syncSingleProductWithSheets(oldProduct.sku, color.code);
+        // Passar snapshot newProducts para evitar ler estado global desatualizado
+        syncSingleProductWithSheets(oldProduct.sku, color.code, newProducts);
       });
     }
   } else {
@@ -1890,7 +1896,8 @@ const saveProduct = async () => {
       if (sheetsUrl) {
         await new Promise(resolve => setTimeout(resolve, 1000));  // Aguardar Firebase listeners
         validColors.forEach(color => {
-          syncSingleProductWithSheets(updatedProduct.sku, color.code);
+          // Enviar snapshot newProducts que já contém as alterações locais
+          syncSingleProductWithSheets(updatedProduct.sku, color.code, newProducts);
         });
       }
       
@@ -1899,7 +1906,8 @@ const saveProduct = async () => {
         oldProduct.colors.forEach(oldColor => {
           const stillExists = validColors.some(newColor => newColor.code === oldColor.code);
           if (!stillExists) {
-            syncSingleProductWithSheets(oldProduct.sku, oldColor.code);
+            // Enviar snapshot com newProducts para refletir remoção
+            syncSingleProductWithSheets(oldProduct.sku, oldColor.code, newProducts);
           }
         });
       }
