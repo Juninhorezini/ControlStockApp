@@ -569,49 +569,34 @@ const testGoogleSheetsConnection = async () => {
   
   console.log('🧪 Testando conexão com:', sheetsUrl);
   
-  const testData = {
+  const params = new URLSearchParams({
     action: 'updateProduct',
     sku: 'TESTE_CONEXAO',
     cor: '999',
-    quantidadeTotal: 1,
-    localizacoes: [{
-      quantidade: 1,
-      corredor: 'TEST',
-      prateleira: 'Teste',
-      localizacao: 'L1:C1'
-    }],
-    usuario: 'Teste App',
-    dataMovimentacao: new Date().toLocaleString('pt-BR')
-  };
+    quantidade: 1,
+    usuario: 'Teste App'
+  });
+  
+  const urlWithParams = `${sheetsUrl}?${params.toString()}`;
   
   try {
-    console.log('📤 Enviando teste:', testData);
+    console.log('📤 Enviando teste via GET');
     
-    const response = await fetch(sheetsUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(testData)
-    });
+    // Usar Image trick para evitar CORS
+    const img = new Image();
+    img.onload = () => console.log('✅ Request enviado');
+    img.onerror = () => console.log('⚠️ Request enviado (erro esperado em CORS)');
+    img.src = urlWithParams;
     
-    console.log('📥 Response status:', response.status);
-    console.log('📥 Response ok:', response.ok);
+    alert('🚀 Request enviado! Verifique a planilha em 5 segundos.');
     
-    const text = await response.text();
-    console.log('📥 Response text:', text);
+    // Aguardar 5 segundos e verificar nas Execuções do Apps Script
+    setTimeout(() => {
+      alert('Agora vá em Apps Script > Execuções e veja se apareceu um log novo.');
+    }, 5000);
     
-    if (response.ok) {
-      const result = JSON.parse(text);
-      console.log('✅ Conexão OK:', result);
-      alert('✅ Conexão com Google Sheets funcionando!\nVerifique a planilha.');
-    } else {
-      console.error('❌ Erro HTTP:', response.status);
-      alert('❌ Erro na conexão. Veja o console.');
-    }
   } catch (error) {
-    console.error('❌ Erro ao testar:', error);
-    alert('❌ Erro: ' + error.message);
+    console.error('❌ Erro:', error);
   }
 };
 
