@@ -467,19 +467,20 @@ const processSyncQueue = async () => {
 };
 
 // VERSÃO CORRIGIDA: Agora lê direto do estado products (não do localStorage)
-const syncSingleProductWithSheets = async (sku, color = '', currentProducts = null) => {
+const syncSingleProductWithSheets = async (sku, color = '') => {
   if (!sheetsUrl) return;
 
   syncQueue.push(async () => {
     try {
-      await new Promise(resolve => setTimeout(resolve, 300));
+      // 🆕 Aguardar Firebase atualizar o estado
+      await new Promise(resolve => setTimeout(resolve, 800));
       
-      const productsToUse = currentProducts || JSON.parse(localStorage.getItem('products') || '{}');
+      // 🆕 LER DIRETAMENTE do estado products (já atualizado pelo Firebase)
       let totalQuantity = 0;
-      let localizacoesArray = [];  // 🆕 Array para múltiplas localizações
+      let localizacoesArray = [];
 
-      Object.keys(productsToUse).forEach(key => {
-        const product = productsToUse[key];
+      Object.keys(products || {}).forEach(key => {
+        const product = products[key];
         if (product?.sku === sku && product.colors) {
           product.colors.forEach(c => {
             if (c.code === color && c.quantity > 0) {
@@ -487,7 +488,6 @@ const syncSingleProductWithSheets = async (sku, color = '', currentProducts = nu
               const [shelfId, row, col] = key.split('-').map(Number);
               const shelf = shelves.find(s => s.id === shelfId);
               if (shelf) {
-                // 🆕 Adicionar cada localização ao array
                 localizacoesArray.push({
                   corredor: shelf.corridor || shelf.name.charAt(0),
                   prateleira: shelf.name,
@@ -500,7 +500,6 @@ const syncSingleProductWithSheets = async (sku, color = '', currentProducts = nu
         }
       });
 
-      // Usar a última localização para os campos individuais
       const lastLocation = localizacoesArray[localizacoesArray.length - 1] || {};
 
       // JSONP request via script tag
@@ -513,7 +512,7 @@ const syncSingleProductWithSheets = async (sku, color = '', currentProducts = nu
         corredor: lastLocation.corredor || '',
         prateleira: lastLocation.prateleira || '',
         localizacao: lastLocation.localizacao || '',
-        localizacoes: JSON.stringify(localizacoesArray)  // 🆕 Enviar array completo
+        localizacoes: JSON.stringify(localizacoesArray)
       });
 
       const script = document.createElement('script');
@@ -1833,7 +1832,7 @@ const saveProduct = async () => {
     if (sheetsUrl && oldProduct && oldProduct.colors) {
       setTimeout(() => {
         oldProduct.colors.forEach(color => {
-          syncSingleProductWithSheets(oldProduct.sku, color.code, newProducts);
+          syncSingleProductWithSheets(oldProduct.sku, color.code);
         });
       }, 500); // Aumentado para 500ms
     }
@@ -1858,7 +1857,7 @@ const saveProduct = async () => {
       if (sheetsUrl) {
         setTimeout(() => {
           validColors.forEach(color => {
-            syncSingleProductWithSheets(updatedProduct.sku, color.code, newProducts);
+            syncSingleProductWithSheets(updatedProduct.sku, color.code);
           });
         }, 500); // Aumentado para 500ms
       }
@@ -1869,7 +1868,7 @@ const saveProduct = async () => {
           const stillExists = validColors.some(newColor => newColor.code === oldColor.code);
           if (!stillExists) {
             setTimeout(() => {
-              syncSingleProductWithSheets(oldProduct.sku, oldColor.code, newProducts);
+              syncSingleProductWithSheets(oldProduct.sku, oldColor.code);
             }, 500);
           }
         });
