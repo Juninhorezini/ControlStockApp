@@ -454,109 +454,65 @@ const processSyncQueue = async () => {
 
 // VERSÃO CORRIGIDA: Agora lê direto do estado products (não do localStorage)
 const syncSingleProductWithSheets = async (sku, color = '', currentProducts = null) => {
-  if (!sheetsUrl) {
-    console.warn('⚠️ URL do Google Sheets não configurada');
-    return;
-  }
+  if (!sheetsUrl) return;
 
   syncQueue.push(async () => {
     try {
-      console.log('🔄 Sync Individual - SKU:', sku, 'COR:', color);
-
-      // CORREÇÃO: Aguardar um pouco para garantir que o estado foi atualizado
       await new Promise(resolve => setTimeout(resolve, 300));
-
-      // Calcular quantidade total e coletar todas as localizações
-      // IMPORTANTE: Usar currentProducts se fornecido, caso contrário usar localStorage
+      
       const productsToUse = currentProducts || JSON.parse(localStorage.getItem('products') || '{}');
       let totalQuantity = 0;
-      let locations = [];
-
-      console.log('📦 Total de produtos no estado:', Object.keys(productsToUse).length);
+      let lastLocation = null;
 
       Object.keys(productsToUse).forEach(key => {
         const product = productsToUse[key];
-        
-        if (product && product.sku === sku && product.colors) {
+        if (product?.sku === sku && product.colors) {
           product.colors.forEach(c => {
             if (c.code === color && c.quantity > 0) {
-              totalQuantity += c.quantity || 0;
-              
+              totalQuantity += c.quantity;
               const [shelfId, row, col] = key.split('-').map(Number);
               const shelf = shelves.find(s => s.id === shelfId);
-              
               if (shelf) {
-                locations.push({
-                  corredor: shelf.corridor || shelf.name.charAt(0).toUpperCase(),
+                lastLocation = {
+                  corredor: shelf.corridor || shelf.name.charAt(0),
                   prateleira: shelf.name,
-                  localizacao: `L${shelf.rows - row}:C${col + 1}`,
-                  quantidade: c.quantity || 0
-                });
-                console.log(`  ↳ Encontrado em: ${shelf.name} - L${shelf.rows - row}:C${col + 1} - Qtd: ${c.quantity}`);
+                  localizacao: `L${shelf.rows - row}:C${col + 1}`
+                };
               }
             }
           });
         }
       });
 
-      console.log('📊 Quantidade total:', totalQuantity, '| Localizações:', locations.length);
-
-      // Se não há mais localizações, ainda enviar para remover da planilha
-      const dataToSend = {
-        action: 'updateProduct',
+      // JSONP request via script tag
+      const params = new URLSearchParams({
+        callback: 'handleSyncResponse',
         sku: sku.trim(),
         cor: color.trim(),
-        quantidadeTotal: totalQuantity,
-        localizacoes: locations,
+        quantidade: totalQuantity,
         usuario: user.name,
-        usuarioId: user.id,
-        dataMovimentacao: new Date().toLocaleString('pt-BR', {
-          day: '2-digit',
-          month: '2-digit',
-          year: 'numeric',
-          hour: '2-digit',
-          minute: '2-digit',
-          second: '2-digit'
-        })
-      };
-
-      console.log('📤 Enviando para Google Sheets:', dataToSend);
-
-      const response = await fetch(sheetsUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(dataToSend),
-        mode: 'no-cors'
+        corredor: lastLocation?.corredor || '',
+        prateleira: lastLocation?.prateleira || '',
+        localizacao: lastLocation?.localizacao || ''
       });
 
-      console.log('✅ Sincronização enviada com sucesso');
-
-    } catch (error) {
-      console.error('❌ Erro ao sincronizar:', error);
+      const script = document.createElement('script');
+      script.src = `${sheetsUrl}?${params.toString()}`;
+      document.body.appendChild(script);
       
-      // Fallback com GET
-      try {
-        console.log('🔄 Tentando fallback...');
-        const params = new URLSearchParams({
-          action: 'updateProduct',
-          sku: sku.trim(),
-          cor: color.trim(),
-          quantidade: totalQuantity || 0,
-          usuario: user.name
-        });
-        
-        const img = new Image();
-        img.src = `${sheetsUrl}?${params.toString()}`;
-        console.log('📤 Fallback enviado');
-      } catch (fallbackError) {
-        console.error('❌ Fallback falhou:', fallbackError);
-      }
+      setTimeout(() => document.body.removeChild(script), 5000);
+      
+    } catch (error) {
+      console.error('❌ Sync error:', error);
     }
   });
 
   processSyncQueue();
+};
+
+// Callback global
+window.handleSyncResponse = function(response) {
+  console.log('✅ Sync response:', response);
 };
 
   // ADICIONAR após a função syncSingleProductWithSheets
