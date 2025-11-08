@@ -559,6 +559,62 @@ const syncSingleProductWithSheets = async (sku, color = '', currentProducts = nu
   processSyncQueue();
 };
 
+  // ADICIONAR após a função syncSingleProductWithSheets
+
+const testGoogleSheetsConnection = async () => {
+  if (!sheetsUrl) {
+    console.error('❌ URL não configurada');
+    return;
+  }
+  
+  console.log('🧪 Testando conexão com:', sheetsUrl);
+  
+  const testData = {
+    action: 'updateProduct',
+    sku: 'TESTE_CONEXAO',
+    cor: '999',
+    quantidadeTotal: 1,
+    localizacoes: [{
+      quantidade: 1,
+      corredor: 'TEST',
+      prateleira: 'Teste',
+      localizacao: 'L1:C1'
+    }],
+    usuario: 'Teste App',
+    dataMovimentacao: new Date().toLocaleString('pt-BR')
+  };
+  
+  try {
+    console.log('📤 Enviando teste:', testData);
+    
+    const response = await fetch(sheetsUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(testData)
+    });
+    
+    console.log('📥 Response status:', response.status);
+    console.log('📥 Response ok:', response.ok);
+    
+    const text = await response.text();
+    console.log('📥 Response text:', text);
+    
+    if (response.ok) {
+      const result = JSON.parse(text);
+      console.log('✅ Conexão OK:', result);
+      alert('✅ Conexão com Google Sheets funcionando!\nVerifique a planilha.');
+    } else {
+      console.error('❌ Erro HTTP:', response.status);
+      alert('❌ Erro na conexão. Veja o console.');
+    }
+  } catch (error) {
+    console.error('❌ Erro ao testar:', error);
+    alert('❌ Erro: ' + error.message);
+  }
+};
+
   // Função para debug da planilha
   const debugSpreadsheet = async () => {
     if (!sheetsUrl) {
@@ -2516,6 +2572,14 @@ const saveProduct = async () => {
                 <Grid className="w-4 h-4" />
                 <span className="hidden sm:inline">Google Sheets</span>
               </button>
+
+             <button
+  onClick={testGoogleSheetsConnection}
+  className="px-3 py-2 bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200"
+  title="Testar conexão com Google Sheets"
+>
+  🧪 Testar Conexão
+</button>
 
               {/* Botão de Backup */}
               <button
