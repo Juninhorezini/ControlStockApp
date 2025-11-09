@@ -518,6 +518,19 @@ const syncSingleProductWithSheets = async (sku, color = '', productsSnapshot = n
       const lastLocation = localizacoesArray[localizacoesArray.length - 1] || {};
 
       // JSONP request via script tag
+      // Debug: log payload summary to ensure localizacoes is present
+      try {
+        console.log('SYNC_SINGLE payload:', {
+          sku: sku && sku.trim(),
+          color: color && color.trim(),
+          quantidade: totalQuantity,
+          localizacoesCount: Array.isArray(localizacoesArray) ? localizacoesArray.length : 0,
+          sampleLocalizacoes: Array.isArray(localizacoesArray) ? localizacoesArray.slice(0,3) : []
+        });
+      } catch (e) {
+        // ignore logging errors
+      }
+
       const params = new URLSearchParams({
         callback: 'handleSyncResponse',
         sku: sku.trim(),
