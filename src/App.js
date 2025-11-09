@@ -1628,6 +1628,7 @@ const fetchLocationsFromFirebase = async (sku, color) => {
 
   const removeColor = (index) => {
     if (!editingProduct.colors) return;
+    if (!confirm('Deseja realmente excluir esta cor?')) return;
     const newColors = editingProduct.colors.filter((_, i) => i !== index);
     setEditingProduct({
       ...editingProduct,
