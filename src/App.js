@@ -493,10 +493,10 @@ const syncSingleProductWithSheets = async (sku, color = '', productsSnapshot = n
         totalQuantity = sourceProducts.totalQuantity;
         localizacoesArray = sourceProducts.localizacoes;
       } else {
-        Object.keys(sourceProducts || {}).forEach(key => {
+        for (const key of Object.keys(sourceProducts || {})) {
           const product = sourceProducts[key];
           if (product?.sku === sku && product.colors) {
-            product.colors.forEach(c => {
+            for (const c of product.colors) {
               if (c.code === color && c.quantity > 0) {
                 totalQuantity += c.quantity;
                 const [shelfId, row, col] = key.split('-').map(Number);
@@ -510,9 +510,9 @@ const syncSingleProductWithSheets = async (sku, color = '', productsSnapshot = n
                   });
                 }
               }
-            });
+            }
           }
-        });
+        };
       }
 
       const lastLocation = localizacoesArray[localizacoesArray.length - 1] || {};
@@ -602,7 +602,7 @@ const fetchLocationsFromFirebase = async (sku, color) => {
     let totalQuantity = 0;
     const localizacoes = [];
 
-    Object.entries(allLocs).forEach(([id, loc]) => {
+    for (const [id, loc] of Object.entries(allLocs)) {
       if (String(loc.sku || '').toUpperCase().trim() === String(sku || '').toUpperCase().trim() && String(loc.color || '').toUpperCase().trim() === String(color || '').toUpperCase().trim()) {
         const shelfFromLoc = loc.shelf || {};
         const shelfObj = (Array.isArray(shelves) ? shelves.find(s => s.id === shelfFromLoc.id) : null) || shelfFromLoc;
@@ -614,7 +614,7 @@ const fetchLocationsFromFirebase = async (sku, color) => {
           quantidade: parseInt(loc.quantity, 10) || 0
         });
       }
-    });
+    };
 
     return { totalQuantity, localizacoes };
   } catch (err) {
@@ -1932,15 +1932,16 @@ const saveProduct = async () => {
       }
       
       // Sincronizar cores removidas
+      // Sincronizar cores removidas (usando for...of para permitir await)
       if (oldProduct && oldProduct.colors) {
-        oldProduct.colors.forEach(oldColor => {
+        for (const oldColor of oldProduct.colors) {
           const stillExists = validColors.some(newColor => newColor.code === oldColor.code);
           if (!stillExists) {
             // Se a cor foi removida localmente, confirmar no backend e enviar resultado
             const backendSnapshot = await fetchLocationsFromFirebase(oldProduct.sku, oldColor.code);
             syncSingleProductWithSheets(oldProduct.sku, oldColor.code, backendSnapshot);
           }
-        });
+        }
       }
     }
   }
