@@ -564,45 +564,6 @@ window.handleSyncResponse = function(response) {
 
   // ADICIONAR após a função syncSingleProductWithSheets
 
-const testGoogleSheetsConnection = async () => {
-  if (!sheetsUrl) {
-    console.error('❌ URL não configurada');
-    return;
-  }
-  
-  console.log('🧪 Testando conexão com:', sheetsUrl);
-  
-  const params = new URLSearchParams({
-    action: 'updateProduct',
-    sku: 'TESTE_CONEXAO',
-    cor: '999',
-    quantidade: 1,
-    usuario: 'Teste App'
-  });
-  
-  const urlWithParams = `${sheetsUrl}?${params.toString()}`;
-  
-  try {
-    console.log('📤 Enviando teste via GET');
-    
-    // Usar Image trick para evitar CORS
-    const img = new Image();
-    img.onload = () => console.log('✅ Request enviado');
-    img.onerror = () => console.log('⚠️ Request enviado (erro esperado em CORS)');
-    img.src = urlWithParams;
-    
-    alert('🚀 Request enviado! Verifique a planilha em 5 segundos.');
-    
-    // Aguardar 5 segundos e verificar nas Execuções do Apps Script
-    setTimeout(() => {
-      alert('Agora vá em Apps Script > Execuções e veja se apareceu um log novo.');
-    }, 5000);
-    
-  } catch (error) {
-    console.error('❌ Erro:', error);
-  }
-};
-
 // Helper: consultar Firebase para obter total e localizacoes atuais de um SKU+color
 const fetchLocationsFromFirebase = async (sku, color) => {
   try {
@@ -2664,14 +2625,6 @@ const saveProduct = async () => {
                 <Grid className="w-4 h-4" />
                 <span className="hidden sm:inline">Google Sheets</span>
               </button>
-
-             <button
-  onClick={testGoogleSheetsConnection}
-  className="px-3 py-2 bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200"
-  title="Testar conexão com Google Sheets"
->
-  🧪 Testar Conexão
-</button>
 
               {/* Botão de Backup */}
               <button
