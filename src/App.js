@@ -474,7 +474,11 @@ const syncSingleProductWithSheets = async (sku, color = '', productsSnapshot = n
   syncQueue.push(async () => {
     try {
       // Se for passado um snapshot, usar imediatamente (garante dado atual enviado)
-      const sourceProducts = productsSnapshot || products;
+  // productsSnapshot can be either:
+  // - null/undefined -> use in-memory products (with a small wait)
+  // - an object keyed by positions (existing behavior)
+  // - an object { totalQuantity, localizacoes } returned from Firebase helper (preferred)
+  const sourceProducts = productsSnapshot || products;
 
       // Se não houver snapshot, aguardar um pequeno delay para dar tempo aos listeners
       if (!productsSnapshot) {
@@ -484,26 +488,32 @@ const syncSingleProductWithSheets = async (sku, color = '', productsSnapshot = n
       let totalQuantity = 0;
       let localizacoesArray = [];
 
-      Object.keys(sourceProducts || {}).forEach(key => {
-        const product = sourceProducts[key];
-        if (product?.sku === sku && product.colors) {
-          product.colors.forEach(c => {
-            if (c.code === color && c.quantity > 0) {
-              totalQuantity += c.quantity;
-              const [shelfId, row, col] = key.split('-').map(Number);
-              const shelf = shelves.find(s => s.id === shelfId);
-              if (shelf) {
-                localizacoesArray.push({
-                  corredor: shelf.corridor || shelf.name.charAt(0),
-                  prateleira: shelf.name,
-                  localizacao: `L${shelf.rows - row}:C${col + 1}`,
-                  quantidade: c.quantity
-                });
+      // If caller passed a precomputed backend snapshot (totalQuantity/localizacoes), use it
+      if (sourceProducts && typeof sourceProducts.totalQuantity === 'number' && Array.isArray(sourceProducts.localizacoes)) {
+        totalQuantity = sourceProducts.totalQuantity;
+        localizacoesArray = sourceProducts.localizacoes;
+      } else {
+        Object.keys(sourceProducts || {}).forEach(key => {
+          const product = sourceProducts[key];
+          if (product?.sku === sku && product.colors) {
+            product.colors.forEach(c => {
+              if (c.code === color && c.quantity > 0) {
+                totalQuantity += c.quantity;
+                const [shelfId, row, col] = key.split('-').map(Number);
+                const shelf = shelves.find(s => s.id === shelfId);
+                if (shelf) {
+                  localizacoesArray.push({
+                    corredor: shelf.corridor || shelf.name.charAt(0),
+                    prateleira: shelf.name,
+                    localizacao: `L${shelf.rows - row}:C${col + 1}`,
+                    quantidade: c.quantity
+                  });
+                }
               }
-            }
-          });
-        }
-      });
+            });
+          }
+        });
+      }
 
       const lastLocation = localizacoesArray[localizacoesArray.length - 1] || {};
 
@@ -577,6 +587,39 @@ const testGoogleSheetsConnection = async () => {
     
   } catch (error) {
     console.error('❌ Erro:', error);
+  }
+};
+
+// Helper: consultar Firebase para obter total e localizacoes atuais de um SKU+color
+const fetchLocationsFromFirebase = async (sku, color) => {
+  try {
+    const locsRef = ref(database, 'locations');
+    const snapshot = await new Promise((resolve) => {
+      onValue(locsRef, resolve, { onlyOnce: true });
+    });
+
+    const allLocs = snapshot.val() || {};
+    let totalQuantity = 0;
+    const localizacoes = [];
+
+    Object.entries(allLocs).forEach(([id, loc]) => {
+      if (String(loc.sku || '').toUpperCase().trim() === String(sku || '').toUpperCase().trim() && String(loc.color || '').toUpperCase().trim() === String(color || '').toUpperCase().trim()) {
+        const shelfFromLoc = loc.shelf || {};
+        const shelfObj = (Array.isArray(shelves) ? shelves.find(s => s.id === shelfFromLoc.id) : null) || shelfFromLoc;
+        totalQuantity += (parseInt(loc.quantity, 10) || 0);
+        localizacoes.push({
+          corredor: shelfObj.corridor || shelfObj.corridor || shelfObj.name?.charAt?.(0) || '',
+          prateleira: shelfObj.name || '',
+          localizacao: loc.position ? (`L${(shelfObj.rows || 0) - (loc.position.row || 0)}:C${(loc.position.col || 0) + 1}`) : '',
+          quantidade: parseInt(loc.quantity, 10) || 0
+        });
+      }
+    });
+
+    return { totalQuantity, localizacoes };
+  } catch (err) {
+    console.error('Erro ao buscar locations do Firebase:', err);
+    return { totalQuantity: 0, localizacoes: [] };
   }
 };
 
@@ -1881,10 +1924,11 @@ const saveProduct = async () => {
       // 🆕 AGUARDAR LISTENERS ATUALIZAREM, DEPOIS SINCRONIZAR
       if (sheetsUrl) {
         await new Promise(resolve => setTimeout(resolve, 1000));  // Aguardar Firebase listeners
-        validColors.forEach(color => {
-          // Enviar snapshot newProducts que já contém as alterações locais
-          syncSingleProductWithSheets(updatedProduct.sku, color.code, newProducts);
-        });
+        // Para garantir consistência do backend, buscar as locations atuais do Firebase antes de sincronizar
+        for (const color of validColors) {
+          const backendSnapshot = await fetchLocationsFromFirebase(updatedProduct.sku, color.code);
+          syncSingleProductWithSheets(updatedProduct.sku, color.code, backendSnapshot);
+        }
       }
       
       // Sincronizar cores removidas
@@ -1892,8 +1936,9 @@ const saveProduct = async () => {
         oldProduct.colors.forEach(oldColor => {
           const stillExists = validColors.some(newColor => newColor.code === oldColor.code);
           if (!stillExists) {
-            // Enviar snapshot com newProducts para refletir remoção
-            syncSingleProductWithSheets(oldProduct.sku, oldColor.code, newProducts);
+            // Se a cor foi removida localmente, confirmar no backend e enviar resultado
+            const backendSnapshot = await fetchLocationsFromFirebase(oldProduct.sku, oldColor.code);
+            syncSingleProductWithSheets(oldProduct.sku, oldColor.code, backendSnapshot);
           }
         });
       }
