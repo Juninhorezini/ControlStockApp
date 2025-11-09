@@ -1868,22 +1868,8 @@ const saveProduct = async () => {
       
       setProducts(newProducts);
       
-      // 🆕 SALVAR NO FIREBASE PRIMEIRO
+      // 🆕 SALVAR NO FIREBASE: usar apenas saveProductToFirebase que já remove e recria as locations
       if (editingPosition && currentShelf) {
-        // Salvar locations
-        await Promise.all(
-          validColors.map(color =>
-            saveLocationToFirebase(
-              currentShelf.id,
-              editingPosition.row,
-              editingPosition.col,
-              editingProduct,
-              color
-            )
-          )
-        );
-        
-        // Salvar product
         await saveProductToFirebase(
           currentShelf.id,
           editingPosition.row,
