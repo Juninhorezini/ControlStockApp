@@ -2069,18 +2069,18 @@ const saveProduct = async () => {
   };
 
   // Função unificada para mover produto
-  const moveProduct = (targetRow, targetCol) => {
+  const moveProduct = async (targetRow, targetCol) => {
     if (!draggedProduct || !draggedPosition || !currentShelf) return;
-    
+
     const sourceKey = `${draggedPosition.shelfId}-${draggedPosition.row}-${draggedPosition.col}`;
     const targetKey = `${currentShelf.id}-${targetRow}-${targetCol}`;
-    
+
     // Se for a mesma posição, não faz nada
     if (sourceKey === targetKey) {
       resetDragStates();
       return;
     }
-    
+
     // Verificar se a posição de destino está ocupada
     const targetProduct = products[targetKey];
     if (targetProduct) {
@@ -2088,15 +2088,44 @@ const saveProduct = async () => {
       resetDragStates();
       return;
     }
-    
-    // Mover o produto
+
+    // Atualizar estado local imediatamente
     const newProducts = { ...products };
     newProducts[targetKey] = draggedProduct;
     delete newProducts[sourceKey];
-    
     setProducts(newProducts);
-    
-    if (navigator.vibrate) navigator.vibrate(100);
+
+    // Atualizar backend: salvar nova location no destino e remover a antiga no source
+    try {
+      // Salvar no destino (cria locations para cada cor)
+      await saveProductToFirebase(currentShelf.id, targetRow, targetCol, draggedProduct);
+
+      // Remover locations antigas na posição de origem (chamando saveProductToFirebase com productData vazio faz a remoção)
+      await saveProductToFirebase(draggedPosition.shelfId, draggedPosition.row, draggedPosition.col, {});
+
+      // Opcional: dar feedback tátil
+      if (navigator.vibrate) navigator.vibrate(100);
+
+      // Atualizar planilha (Sheets) para cada cor deste SKU usando snapshot do backend
+      if (typeof fetchLocationsFromFirebase === 'function' && typeof syncSingleProductWithSheets === 'function') {
+        for (const color of (draggedProduct.colors || [])) {
+          try {
+            const backendSnapshot = await fetchLocationsFromFirebase(draggedProduct.sku, color.code);
+            await syncSingleProductWithSheets(draggedProduct.sku, color.code, backendSnapshot);
+          } catch (syncErr) {
+            console.warn('⚠️ Erro ao sincronizar Sheets após mover produto:', syncErr);
+          }
+        }
+      }
+    } catch (err) {
+      console.error('❌ Erro ao mover produto (Firebase):', err);
+      // Em caso de erro backend, podemos reverter o estado local para manter consistência
+      const reverted = { ...products };
+      reverted[sourceKey] = draggedProduct;
+      delete reverted[targetKey];
+      setProducts(reverted);
+    }
+
     resetDragStates();
   };
 
@@ -2363,34 +2392,63 @@ const saveProduct = async () => {
     return available;
   };
 
-  // Função para executar o movimento
-  const executeMoveProduct = () => {
+  // Função para executar o movimento (usada pelo modal mobile)
+  const executeMoveProduct = async () => {
     if (!moveSourcePosition || !moveTargetPosition || !moveTargetShelf) return;
-    
+
     const sourceKey = `${moveSourcePosition.shelfId}-${moveSourcePosition.row}-${moveSourcePosition.col}`;
     const targetKey = `${moveTargetShelf}-${moveTargetPosition.row}-${moveTargetPosition.col}`;
-    
+
     if (sourceKey === targetKey) {
       alert('Posição de origem e destino são iguais!');
       return;
     }
-    
+
+    // Atualizar estado local imediatamente
     const newProducts = { ...products };
     newProducts[targetKey] = moveSourcePosition.product;
     delete newProducts[sourceKey];
-    
     setProducts(newProducts);
-    
-    // Fechar modal
+
+    // Fechar modal UI
     setShowMoveModal(false);
     setMoveSourcePosition(null);
     setMoveTargetShelf('');
     setMoveTargetPosition(null);
-    
-    // Se mudou de prateleira, ir para a prateleira destino
+
+    // Se mudou de prateleira, ir para a prateleira destino (UI)
     const targetShelfIndex = shelves.findIndex(s => s.id === parseInt(moveTargetShelf));
     if (targetShelfIndex !== -1 && targetShelfIndex !== selectedShelf) {
       setSelectedShelf(targetShelfIndex);
+    }
+
+    // Atualizar backend: criar locations no destino e remover a antiga origem
+    try {
+      // Salvar no destino
+      await saveProductToFirebase(parseInt(moveTargetShelf), moveTargetPosition.row, moveTargetPosition.col, moveSourcePosition.product);
+
+      // Remover locations antigas na posição de origem (chamada com objeto vazio remove)
+      await saveProductToFirebase(moveSourcePosition.shelfId, moveSourcePosition.row, moveSourcePosition.col, {});
+
+      // Sincronizar Sheets por cor usando snapshot do backend
+      if (typeof fetchLocationsFromFirebase === 'function' && typeof syncSingleProductWithSheets === 'function') {
+        for (const color of (moveSourcePosition.product.colors || [])) {
+          try {
+            const backendSnapshot = await fetchLocationsFromFirebase(moveSourcePosition.product.sku, color.code);
+            await syncSingleProductWithSheets(moveSourcePosition.product.sku, color.code, backendSnapshot);
+          } catch (syncErr) {
+            console.warn('⚠️ Erro ao sincronizar Sheets após move via modal:', syncErr);
+          }
+        }
+      }
+    } catch (err) {
+      console.error('❌ Erro ao executar move via modal (Firebase):', err);
+      // Reverter estado local se houve falha no backend
+      const reverted = { ...products };
+      reverted[sourceKey] = moveSourcePosition.product;
+      delete reverted[targetKey];
+      setProducts(reverted);
+      alert('Erro ao mover produto. Operação revertida.');
     }
   };
 
