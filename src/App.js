@@ -192,6 +192,32 @@ const StockControlApp = () => {
     return userNames[userId] || `Usuário ${userId.slice(-6)}`;
   };
 
+  // Função para obter nome amigável do usuário para exibição na planilha
+  const getFriendlyDisplayName = (userId) => {
+    // Se temos um nome personalizado no userNames, usar ele
+    if (userNames[userId]) {
+      return userNames[userId];
+    }
+    
+    // Se o userId é o do usuário atual, usar o nome dele
+    if (userId === user?.id) {
+      return user.name;
+    }
+    
+    // Se é admin, verificar se temos informação no securitySettings
+    if (securitySettings?.adminUsers?.includes(userId)) {
+      // Procurar em todas as entradas do userNames por um nome mais amigável
+      const adminEntry = Object.entries(userNames).find(([key]) => key === userId);
+      if (adminEntry) {
+        return adminEntry[1];  // Retorna o nome encontrado
+      }
+    }
+
+    // Se não encontrou nada melhor, retornar o nome original do usuário atual
+    // Em vez de mostrar o ID, vamos tentar usar o nome do usuário que está vendo
+    return user?.name || userId;
+  };
+
   // Função para adicionar administrador - CORRIGIDA
   const addAdministrator = () => {
     if (!newAdminId.trim()) {
@@ -1152,7 +1178,7 @@ const fetchLocationsFromFirebase = async (sku, color) => {
               (async () => {
                 const backendSnapshot = await fetchLocationsFromFirebase(locSku, locColor);
                 const lastUpdaterId = backendSnapshot?.lastUpdatedBy;
-                const lastUpdaterName = lastUpdaterId ? (userNames?.[lastUpdaterId] || lastUpdaterId) : null;
+                const lastUpdaterName = lastUpdaterId ? getFriendlyDisplayName(lastUpdaterId) : null;
                 syncSingleProductWithSheets(locSku, locColor, backendSnapshot, lastUpdaterName);
               })();
             }
@@ -1950,7 +1976,7 @@ const saveProduct = async () => {
         for (const color of validColors) {
           const backendSnapshot = await fetchLocationsFromFirebase(updatedProduct.sku, color.code);
           const lastUpdaterId = backendSnapshot?.lastUpdatedBy;
-          const lastUpdaterName = lastUpdaterId ? (userNames?.[lastUpdaterId] || lastUpdaterId) : null;
+          const lastUpdaterName = lastUpdaterId ? getFriendlyDisplayName(lastUpdaterId) : null;
           syncSingleProductWithSheets(updatedProduct.sku, color.code, backendSnapshot, lastUpdaterName);
         }
       }
@@ -1964,7 +1990,7 @@ const saveProduct = async () => {
             // Se a cor foi removida localmente, confirmar no backend e enviar resultado
             const backendSnapshot = await fetchLocationsFromFirebase(oldProduct.sku, oldColor.code);
             const lastUpdaterId = backendSnapshot?.lastUpdatedBy;
-            const lastUpdaterName = lastUpdaterId ? (userNames?.[lastUpdaterId] || lastUpdaterId) : null;
+            const lastUpdaterName = lastUpdaterId ? getFriendlyDisplayName(lastUpdaterId) : null;
             syncSingleProductWithSheets(oldProduct.sku, oldColor.code, backendSnapshot, lastUpdaterName);
           }
         }
@@ -2138,7 +2164,7 @@ const saveProduct = async () => {
           try {
             const backendSnapshot = await fetchLocationsFromFirebase(draggedProduct.sku, color.code);
             const lastUpdaterId = backendSnapshot?.lastUpdatedBy;
-            const lastUpdaterName = lastUpdaterId ? (userNames?.[lastUpdaterId] || lastUpdaterId) : null;
+            const lastUpdaterName = lastUpdaterId ? getFriendlyDisplayName(lastUpdaterId) : null;
             await syncSingleProductWithSheets(draggedProduct.sku, color.code, backendSnapshot, lastUpdaterName);
           } catch (syncErr) {
             console.warn('⚠️ Erro ao sincronizar Sheets após mover produto:', syncErr);
@@ -2464,7 +2490,7 @@ const saveProduct = async () => {
           try {
             const backendSnapshot = await fetchLocationsFromFirebase(moveSourcePosition.product.sku, color.code);
             const lastUpdaterId = backendSnapshot?.lastUpdatedBy;
-            const lastUpdaterName = lastUpdaterId ? (userNames?.[lastUpdaterId] || lastUpdaterId) : null;
+            const lastUpdaterName = lastUpdaterId ? getFriendlyDisplayName(lastUpdaterId) : null;
             await syncSingleProductWithSheets(moveSourcePosition.product.sku, color.code, backendSnapshot, lastUpdaterName);
           } catch (syncErr) {
             console.warn('⚠️ Erro ao sincronizar Sheets após move via modal:', syncErr);
