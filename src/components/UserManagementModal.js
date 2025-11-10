@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Plus, Edit2, Trash2, Shield, User as UserIcon, Save, AlertCircle } from 'lucide-react';
-import { database, ref, get, set as dbSet, remove } from '../firebaseConfig';
+import { database, ref, get, set as dbSet, remove, push, auth } from '../firebaseConfig';
 import { useAuth } from '../hooks/useAuth';
 
 export default function UserManagementModal({ user, setShowSecuritySettings, isMobile = false }) {
@@ -12,7 +12,7 @@ export default function UserManagementModal({ user, setShowSecuritySettings, isM
   const [editingUser, setEditingUser] = useState(null);
 
   // Form para criar/editar usuário
-  const [formData, setFormData] = useState({ username: '', email: '', role: 'user' });
+  const [formData, setFormData] = useState({ username: '', email: '', role: 'user', password: '' });
 
   // Carregar lista de usuários do Firebase
   const loadUsers = async () => {
@@ -34,7 +34,7 @@ export default function UserManagementModal({ user, setShowSecuritySettings, isM
       }
     } catch (err) {
       console.error('Erro ao carregar usuários:', err);
-      setError('Erro ao carregar usuários');
+      setError(err?.message || 'Erro ao carregar usuários');
     } finally {
       setLoading(false);
     }
@@ -204,6 +204,16 @@ export default function UserManagementModal({ user, setShowSecuritySettings, isM
                   />
                 </div>
                 <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Senha inicial</label>
+                  <input
+                    type="password"
+                    placeholder="Senha inicial (mín 6)"
+                    value={formData.password}
+                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                    className="w-full px-3 py-2 border rounded-lg text-sm"
+                  />
+                </div>
+                <div>
                   <label className="block text-xs font-medium text-gray-700 mb-1">Tipo de Conta</label>
                   <select
                     value={formData.role}
@@ -224,12 +234,87 @@ export default function UserManagementModal({ user, setShowSecuritySettings, isM
                   >
                     Cancelar
                   </button>
-                  <button
-                    onClick={() => alert('Para criar usuários, use a página de Registro (LoginPage). Este modal é apenas para gerenciar usuários existentes.')}
-                    className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm"
-                  >
-                    <Save className="w-4 h-4" /> Criar
-                  </button>
+                          <button
+                            onClick={async () => {
+                              const username = (formData.username || '').trim();
+                              const email = (formData.email || '').trim();
+                              const password = (formData.password || '').trim();
+                              const role = formData.role || 'user';
+
+                              if (!username) return setError('Informe um nome de usuário.');
+                              if (!email) return setError('Informe um email.');
+                              if (!password || password.length < 6) return setError('Senha mínima de 6 caracteres.');
+
+                              setError('');
+                              const createUrl = process.env.REACT_APP_CREATE_USER_URL;
+
+                              if (createUrl) {
+                                // Tenta criar via backend (Cloud Function). Envia idToken do admin.
+                                try {
+                                  const currentUser = auth && auth.currentUser;
+                                  if (!currentUser) throw new Error('Você não está autenticado');
+                                  const idToken = await currentUser.getIdToken();
+
+                                  const resp = await fetch(createUrl.replace(/\/+$/, '') + '/createUser', {
+                                    method: 'POST',
+                                    headers: {
+                                      'Content-Type': 'application/json',
+                                      'Authorization': `Bearer ${idToken}`
+                                    },
+                                    body: JSON.stringify({ email, password, username, role })
+                                  });
+
+                                  const json = await resp.json();
+                                  if (!resp.ok) {
+                                    throw new Error(json.error || 'Erro no endpoint');
+                                  }
+
+                                  await loadUsers();
+                                  setFormData({ username: '', email: '', role: 'user', password: '' });
+                                  setShowCreateForm(false);
+                                  alert('Usuário criado (Auth + DB) via backend.');
+                                  return;
+                                } catch (err) {
+                                  console.error('Erro ao criar via backend:', err);
+                                  // fallback para DB-only
+                                  setError('Falha ao criar via backend: ' + (err.message || '')); 
+                                }
+                              }
+
+                              // Fallback: criar apenas no DB (DB-only)
+                              try {
+                                // Verifica existência de username
+                                const unameRef = ref(database, `usernames/${username}`);
+                                const unameSnap = await get(unameRef);
+                                if (unameSnap && unameSnap.exists()) {
+                                  setError('Nome de usuário já existe');
+                                  return;
+                                }
+
+                                const newRef = push(ref(database, 'users'));
+                                const newUid = newRef.key;
+                                await dbSet(ref(database, `users/${newUid}`), {
+                                  username,
+                                  displayName: username,
+                                  email: email || '',
+                                  role,
+                                  createdAt: new Date().toISOString(),
+                                  note: 'created_by_admin_db_only'
+                                });
+                                await dbSet(ref(database, `usernames/${username}`), newUid);
+                                await loadUsers();
+                                setFormData({ username: '', email: '', role: 'user', password: '' });
+                                setShowCreateForm(false);
+                                alert('Usuário criado no banco (DB-only). Para criar conta Auth, configure REACT_APP_CREATE_USER_URL');
+                              } catch (err) {
+                                console.error('Erro ao criar usuário DB-only:', err);
+                                setError('Erro ao criar usuário');
+                              }
+                            }}
+                            className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm"
+                          >
+                            <Save className="w-4 h-4" /> Criar
+                          </button>
                 </div>
               </div>
             </div>
