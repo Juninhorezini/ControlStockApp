@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Settings, Plus, Edit, Lock, User, Save, X } from 'lucide-react';
+import { database, ref, get, set as dbSet } from '../firebaseConfig';
 
 export function UserAdminModal({
   user,
@@ -14,12 +15,147 @@ export function UserAdminModal({
   getUserDisplayName,
   isMobile
 }) {
+  const [usersData, setUsersData] = useState({});
+  const [loadingUsers, setLoadingUsers] = useState(false);
+  const [unmappedIds, setUnmappedIds] = useState([]);
+  const [mappingInputs, setMappingInputs] = useState({});
+
+  useEffect(() => {
+    let mounted = true;
+    const loadUsers = async () => {
+      setLoadingUsers(true);
+      try {
+        const usersRef = ref(database, 'users');
+        const snap = await get(usersRef);
+        const data = snap.val() || {};
+        if (!mounted) return;
+        setUsersData(data);
+      } catch (err) {
+        console.warn('Erro ao carregar usuários:', err);
+      } finally {
+        setLoadingUsers(false);
+      }
+    };
+    loadUsers();
+
+    // scan locations for unmapped updated_by values
+    const scanUnmapped = async () => {
+      try {
+        const locsRef = ref(database, 'locations');
+        const snap = await get(locsRef);
+        const all = snap.val() || {};
+        const ids = new Set();
+        Object.values(all).forEach(loc => {
+          const ub = loc?.metadata?.updated_by;
+          if (!ub) return;
+          if (typeof ub === 'string') {
+            // if string and not a known uid in usersData and not a value in userNames
+            if (!Object.keys(usersData).includes(ub) && !Object.values(userNames || {}).includes(ub)) {
+              ids.add(ub);
+            }
+          } else if (typeof ub === 'object') {
+            if (ub.uid && !Object.keys(usersData).includes(ub.uid) && !Object.values(userNames || {}).includes(ub.displayName || '')) {
+              ids.add(ub.uid);
+            }
+          }
+        });
+        setUnmappedIds(Array.from(ids));
+      } catch (err) {
+        console.warn('Erro ao varrer locations:', err);
+      }
+    };
+    scanUnmapped();
+
+    return () => { mounted = false; };
+  }, []); // run once
+
+  const handleMap = async (id) => {
+    const val = (mappingInputs[id] || '').trim();
+    if (!val) {
+      alert('Informe um nome para mapear');
+      return;
+    }
+    try {
+      // Write to /users/{uid} and /usernames/{username}
+      await dbSet(ref(database, `users/${id}`), { username: val, displayName: val });
+      await dbSet(ref(database, `usernames/${val}`), id);
+      // update local cache
+      setUserNames(prev => ({ ...(prev || {}), [id]: val }));
+      // remove from unmapped
+      setUnmappedIds(prev => prev.filter(x => x !== id));
+      alert('Mapeamento salvo');
+    } catch (err) {
+      console.error('Erro ao salvar mapeamento:', err);
+      alert('Erro ao salvar mapeamento');
+    }
+  };
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-2 md:p-4 z-50">
       <div className={`bg-white rounded-lg p-4 md:p-6 w-full ${isMobile ? 'max-w-full h-full max-h-full overflow-y-auto' : 'max-w-lg'}`}>
         <div className="flex items-center gap-3 mb-6 justify-center md:justify-start">
           <Settings className="w-6 h-6 text-blue-600" />
           <h3 className="text-lg font-semibold">Configurações do Administrador</h3>
+        </div>
+
+        {/* Seção: Gerenciar Usuários e Migração */}
+        <div className="mt-6 p-4 bg-yellow-50 rounded-lg border border-yellow-200">
+          <h4 className="font-semibold mb-3">👥 Gerenciar Usuários</h4>
+
+          <div className="space-y-3 mb-4">
+            <div className="text-sm text-gray-700">Usuários registrados ({Object.keys(usersData).length})</div>
+            <div className="max-h-40 overflow-y-auto space-y-2 mt-2">
+              {loadingUsers && <div className="text-sm text-gray-500">Carregando usuários...</div>}
+              {!loadingUsers && Object.keys(usersData).length === 0 && (
+                <div className="text-sm text-gray-500">Nenhum usuário registrado no nó /users</div>
+              )}
+              {Object.entries(usersData).map(([uid, info]) => (
+                <div key={uid} className="flex items-center gap-3 p-2 bg-white rounded border">
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium truncate">{info.displayName || info.username || uid}</div>
+                    <div className="text-xs text-gray-500 truncate">UID: {uid}</div>
+                  </div>
+                  <button
+                    onClick={async () => {
+                      const newName = prompt('Editar nome de exibição para ' + uid + ':', info.displayName || info.username || '');
+                      if (!newName || !newName.trim()) return;
+                      try {
+                        await dbSet(ref(database, `users/${uid}`), { ...info, displayName: newName.trim(), username: newName.trim() });
+                        setUsersData(prev => ({ ...prev, [uid]: { ...info, displayName: newName.trim(), username: newName.trim() } }));
+                        setUserNames(prev => ({ ...(prev || {}), [uid]: newName.trim() }));
+                        alert('Nome atualizado');
+                      } catch (err) {
+                        console.error('Erro ao atualizar usuário:', err);
+                        alert('Erro ao atualizar');
+                      }
+                    }}
+                    className="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded"
+                  >
+                    Editar
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="mt-4">
+            <div className="text-sm font-medium mb-2">🔁 Entradas sem mapeamento encontradas nas locations</div>
+            {unmappedIds.length === 0 && <div className="text-xs text-gray-500">Nenhuma entrada pendente</div>}
+            <div className="space-y-2 mt-2">
+              {unmappedIds.map(id => (
+                <div key={id} className="flex items-center gap-2">
+                  <div className="flex-1 text-sm truncate">{id}</div>
+                  <input
+                    type="text"
+                    className="px-2 py-1 border rounded"
+                    placeholder="nome para mapear"
+                    value={mappingInputs[id] || ''}
+                    onChange={(e) => setMappingInputs(prev => ({ ...prev, [id]: e.target.value }))}
+                  />
+                  <button onClick={() => handleMap(id)} className="px-2 py-1 bg-green-100 text-green-700 rounded text-xs">Mapear</button>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
 
         <div className="space-y-6">

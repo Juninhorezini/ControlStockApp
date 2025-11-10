@@ -317,6 +317,61 @@ const StockControlApp = () => {
     return user.name;
   };
 
+  // Async resolver: given a UID, username string, or metadata object, try to return a display name.
+  const resolveUserDisplayName = async (idOrObj) => {
+    if (!idOrObj) return null;
+    // If object with displayName
+    if (typeof idOrObj === 'object') {
+      if (idOrObj.displayName) return idOrObj.displayName;
+      if (idOrObj.username) return idOrObj.username;
+      if (idOrObj.uid && userNames?.[idOrObj.uid]) return userNames[idOrObj.uid];
+      if (idOrObj.uid) {
+        // try fetch from DB
+        try {
+          const snap = await get(ref(database, `users/${idOrObj.uid}`));
+          const data = snap?.val();
+          if (data) {
+            const name = data.displayName || data.username || (data.email ? data.email.split('@')[0] : idOrObj.uid);
+            setUserNames(prev => ({ ...(prev || {}), [idOrObj.uid]: name }));
+            return name;
+          }
+        } catch (e) {
+          console.warn('Erro ao buscar usuário por uid:', e);
+        }
+      }
+      return null;
+    }
+
+    // If it's already a known username (value), return it
+    if (Object.values(userNames || {}).includes(idOrObj)) return idOrObj;
+
+    // If we have mapping uid -> name in userNames
+    if (userNames?.[idOrObj]) return userNames[idOrObj];
+
+    // Try to fetch /users/{uid} from DB (may succeed if idOrObj is uid)
+    try {
+      const snap = await get(ref(database, `users/${idOrObj}`));
+      const data = snap?.val();
+      if (data) {
+        const name = data.displayName || data.username || (data.email ? data.email.split('@')[0] : idOrObj);
+        setUserNames(prev => ({ ...(prev || {}), [idOrObj]: name }));
+        return name;
+      }
+    } catch (e) {
+      console.warn('Erro ao buscar /users/:', e);
+    }
+
+    // If it looks like an email, extract local-part
+    if (typeof idOrObj === 'string' && idOrObj.includes('@')) {
+      const nameFromEmail = idOrObj.split('@')[0];
+      setUserNames(prev => ({ ...(prev || {}), [idOrObj]: nameFromEmail }));
+      return nameFromEmail;
+    }
+
+    // Fallback: return the string as-is (may be uid)
+    return idOrObj;
+  };
+
   // Função para adicionar administrador - CORRIGIDA
   const addAdministrator = () => {
     if (!newAdminId.trim()) {
@@ -1290,7 +1345,7 @@ const fetchLocationsFromFirebase = async (sku, color) => {
               (async () => {
                 const backendSnapshot = await fetchLocationsFromFirebase(locSku, locColor);
                 const lastUpdaterId = backendSnapshot?.lastUpdatedBy;
-                const lastUpdaterName = lastUpdaterId ? getFriendlyDisplayName(lastUpdaterId) : null;
+                const lastUpdaterName = lastUpdaterId ? await resolveUserDisplayName(lastUpdaterId) : null;
                 syncSingleProductWithSheets(locSku, locColor, backendSnapshot, lastUpdaterName);
               })();
             }
@@ -2089,7 +2144,7 @@ const saveProduct = async () => {
         for (const color of validColors) {
           const backendSnapshot = await fetchLocationsFromFirebase(updatedProduct.sku, color.code);
           const lastUpdaterId = backendSnapshot?.lastUpdatedBy;
-          const lastUpdaterName = lastUpdaterId ? getFriendlyDisplayName(lastUpdaterId) : null;
+          const lastUpdaterName = lastUpdaterId ? await resolveUserDisplayName(lastUpdaterId) : null;
           syncSingleProductWithSheets(updatedProduct.sku, color.code, backendSnapshot, lastUpdaterName);
         }
       }
@@ -2103,7 +2158,7 @@ const saveProduct = async () => {
             // Se a cor foi removida localmente, confirmar no backend e enviar resultado
             const backendSnapshot = await fetchLocationsFromFirebase(oldProduct.sku, oldColor.code);
             const lastUpdaterId = backendSnapshot?.lastUpdatedBy;
-            const lastUpdaterName = lastUpdaterId ? getFriendlyDisplayName(lastUpdaterId) : null;
+            const lastUpdaterName = lastUpdaterId ? await resolveUserDisplayName(lastUpdaterId) : null;
             syncSingleProductWithSheets(oldProduct.sku, oldColor.code, backendSnapshot, lastUpdaterName);
           }
         }
@@ -2277,7 +2332,7 @@ const saveProduct = async () => {
           try {
             const backendSnapshot = await fetchLocationsFromFirebase(draggedProduct.sku, color.code);
             const lastUpdaterId = backendSnapshot?.lastUpdatedBy;
-            const lastUpdaterName = lastUpdaterId ? getFriendlyDisplayName(lastUpdaterId) : null;
+            const lastUpdaterName = lastUpdaterId ? await resolveUserDisplayName(lastUpdaterId) : null;
             await syncSingleProductWithSheets(draggedProduct.sku, color.code, backendSnapshot, lastUpdaterName);
           } catch (syncErr) {
             console.warn('⚠️ Erro ao sincronizar Sheets após mover produto:', syncErr);
@@ -2603,7 +2658,7 @@ const saveProduct = async () => {
           try {
             const backendSnapshot = await fetchLocationsFromFirebase(moveSourcePosition.product.sku, color.code);
             const lastUpdaterId = backendSnapshot?.lastUpdatedBy;
-            const lastUpdaterName = lastUpdaterId ? getFriendlyDisplayName(lastUpdaterId) : null;
+            const lastUpdaterName = lastUpdaterId ? await resolveUserDisplayName(lastUpdaterId) : null;
             await syncSingleProductWithSheets(moveSourcePosition.product.sku, color.code, backendSnapshot, lastUpdaterName);
           } catch (syncErr) {
             console.warn('⚠️ Erro ao sincronizar Sheets após move via modal:', syncErr);
