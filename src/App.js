@@ -131,7 +131,31 @@ const StockControlApp = () => {
   });
 
   // Sistema de nomes personalizados para usuários
-  const [userNames, setUserNames] = useStoredState('userNames', {});
+  const defaultUserNames = {
+    // Garantir que o usuário atual sempre tenha seu nome no userNames
+    [authUser.uid]: authUser.displayName || authUser.email.split('@')[0],
+  };
+  const [userNames, setUserNames] = useStoredState('userNames', defaultUserNames);
+  
+  // Garantir que temos os nomes mais recentes no userNames
+  useEffect(() => {
+    const updates = {};
+    let needsUpdate = false;
+
+    // Sempre manter o nome do usuário atual atualizado
+    if (userNames[user.id] !== user.name) {
+      updates[user.id] = user.name;
+      needsUpdate = true;
+    }
+
+    // Se houver atualizações necessárias
+    if (needsUpdate) {
+      setUserNames(prev => ({
+        ...prev,
+        ...updates
+      }));
+    }
+  }, [user.id, user.name, setUserNames]);
   
   // Estados para gerenciar administradores
   const [showAddAdmin, setShowAddAdmin] = useState(false);
@@ -194,28 +218,70 @@ const StockControlApp = () => {
 
   // Função para obter nome amigável do usuário para exibição na planilha
   const getFriendlyDisplayName = (userId) => {
+    console.log('🔍 Resolvendo nome para userId:', userId, {
+      userNamesEntries: Object.entries(userNames),
+      currentUser: user,
+      securitySettings
+    });
+
+    // Se não temos um userId, retornar o nome do usuário atual
+    if (!userId) {
+      console.log('⚠️ userId vazio, usando nome do usuário atual:', user.name);
+      return user.name;
+    }
+    
     // Se temos um nome personalizado no userNames, usar ele
     if (userNames[userId]) {
+      console.log('✅ Nome encontrado em userNames:', userNames[userId]);
       return userNames[userId];
     }
     
     // Se o userId é o do usuário atual, usar o nome dele
     if (userId === user?.id) {
+      // Atualizar userNames para futuros lookups
+      setUserNames(prev => ({
+        ...prev,
+        [userId]: user.name
+      }));
+      console.log('✅ É o usuário atual, usando e salvando nome:', user.name);
       return user.name;
     }
     
     // Se é admin, verificar se temos informação no securitySettings
     if (securitySettings?.adminUsers?.includes(userId)) {
-      // Procurar em todas as entradas do userNames por um nome mais amigável
-      const adminEntry = Object.entries(userNames).find(([key]) => key === userId);
-      if (adminEntry) {
-        return adminEntry[1];  // Retorna o nome encontrado
+      // Procurar por um nome existente
+      const existingName = userNames[userId];
+      if (existingName) {
+        console.log('✅ Nome de admin encontrado:', existingName);
+        return existingName;
       }
     }
 
-    // Se não encontrou nada melhor, retornar o nome original do usuário atual
-    // Em vez de mostrar o ID, vamos tentar usar o nome do usuário que está vendo
-    return user?.name || userId;
+    // Se chegamos aqui e o userId parece ser um email ou tem um nome embutido
+    if (userId.includes('@')) {
+      const nameFromEmail = userId.split('@')[0];
+      // Salvar para uso futuro
+      setUserNames(prev => ({
+        ...prev,
+        [userId]: nameFromEmail
+      }));
+      console.log('✅ Nome extraído do email:', nameFromEmail);
+      return nameFromEmail;
+    }
+
+    // Se ainda não encontramos um nome, mas temos o mesmo userId em outro lugar
+    const existingEntry = Object.entries(userNames).find(([key, value]) => 
+      key === userId || value.toLowerCase().includes(userId.toLowerCase())
+    );
+    if (existingEntry) {
+      console.log('✅ Nome relacionado encontrado:', existingEntry[1]);
+      return existingEntry[1];
+    }
+
+    console.log('⚠️ Nenhum nome encontrado, usando fallback:', user.name);
+    // Se realmente não encontramos nada, usar o nome do usuário atual
+    // mas não mostrar o ID
+    return user.name;
   };
 
   // Função para adicionar administrador - CORRIGIDA
@@ -547,23 +613,35 @@ const syncSingleProductWithSheets = async (sku, color = '', productsSnapshot = n
       // JSONP request via script tag
       // Debug: log payload summary to ensure localizacoes is present
       try {
+        // Se tiver um nome personalizado passado, usar ele
+        // Se não, tentar pegar o nome amigável do usuário atual
+        const displayName = usuarioName || getFriendlyDisplayName(user.id);
+
         console.log('SYNC_SINGLE payload:', {
           sku: sku && sku.trim(),
           color: color && color.trim(),
           quantidade: totalQuantity,
           localizacoesCount: Array.isArray(localizacoesArray) ? localizacoesArray.length : 0,
-          sampleLocalizacoes: Array.isArray(localizacoesArray) ? localizacoesArray.slice(0,3) : []
+          sampleLocalizacoes: Array.isArray(localizacoesArray) ? localizacoesArray.slice(0,3) : [],
+          usuario: displayName,  // Log do nome que será usado
+          usuarioOriginal: usuarioName,  // Nome que foi passado
+          usuarioAtual: user.name,  // Nome do usuário atual
+          userId: user.id  // ID do usuário atual
         });
       } catch (e) {
         // ignore logging errors
       }
+
+      // Se tiver um nome personalizado passado, usar ele
+      // Se não, tentar pegar o nome amigável do usuário atual
+      const displayName = usuarioName || getFriendlyDisplayName(user.id);
 
       const params = new URLSearchParams({
         callback: 'handleSyncResponse',
         sku: sku.trim(),
         cor: color.trim(),
         quantidade: totalQuantity,
-        usuario: usuarioName || user.name,
+        usuario: displayName,  // Sempre usar nome amigável
         corredor: lastLocation.corredor || '',
         prateleira: lastLocation.prateleira || '',
         localizacao: lastLocation.localizacao || '',
