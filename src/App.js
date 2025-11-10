@@ -6,7 +6,7 @@ import { database, ref, onValue, set, update, push, remove , get, onChildAdded, 
 import { useAuth } from './hooks/useAuth';
 import { LoginPage } from './pages/LoginPage';
 import { LogoutButton } from './components/LogoutButton';
-import UserAdminModal from './components/UserAdminModal';
+import UserManagementModal from './components/UserManagementModal';
 import { logAuditAction, addUserMetadata, updateUserMetadata } from './utils/auditService';
 
 
@@ -4050,19 +4050,13 @@ const saveProduct = async () => {
           </div>
         )}
 
-        {/* Modal: Configurações de Admin */}
+        {/* Modal: Configurações de Admin (novo, minimalista) */}
         {showSecuritySettings && isAdmin() && (
-          <UserAdminModal
+          <UserManagementModal
             user={user}
             userNames={userNames}
-            securitySettings={securitySettings}
-            setSecuritySettings={setSecuritySettings}
             setUserNames={setUserNames}
-            editUserName={editUserName}
-            removeAdministrator={removeAdministrator}
-            saveSecuritySettings={saveSecuritySettings}
             setShowSecuritySettings={setShowSecuritySettings}
-            getUserDisplayName={getUserDisplayName}
             isMobile={isMobile}
           />
         )}
