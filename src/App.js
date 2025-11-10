@@ -1134,6 +1134,25 @@ const fetchLocationsFromFirebase = async (sku, color) => {
         });
 
         console.log('Location adicionada:', snapshot.key);
+
+        // Após adicionar a location no estado, disparar sync para Google Sheets
+        // somente se a carga inicial já foi completada e se a alteração
+        // não foi originalmente feita por este mesmo usuário (evita duplicatas)
+        if (initialLoadComplete) {
+          try {
+            const locSku = loc.sku;
+            const locColor = loc.color;
+            const updatedBy = loc.metadata?.updated_by;
+            if (!updatedBy || updatedBy !== user.id) {
+              (async () => {
+                const backendSnapshot = await fetchLocationsFromFirebase(locSku, locColor);
+                syncSingleProductWithSheets(locSku, locColor, backendSnapshot);
+              })();
+            }
+          } catch (err) {
+            console.error('❌ Erro ao disparar sync após child added:', err);
+          }
+        }
       });
 
       const unsubChanged = onChildChanged(locsRef, (snapshot) => {
@@ -1154,6 +1173,23 @@ const fetchLocationsFromFirebase = async (sku, color) => {
         });
 
         console.log('Location modificada:', snapshot.key);
+
+        // Disparar sync quando uma location for alterada por outro usuário
+        if (initialLoadComplete) {
+          try {
+            const locSku = loc.sku;
+            const locColor = loc.color;
+            const updatedBy = loc.metadata?.updated_by;
+            if (!updatedBy || updatedBy !== user.id) {
+              (async () => {
+                const backendSnapshot = await fetchLocationsFromFirebase(locSku, locColor);
+                syncSingleProductWithSheets(locSku, locColor, backendSnapshot);
+              })();
+            }
+          } catch (err) {
+            console.error('❌ Erro ao disparar sync após child changed:', err);
+          }
+        }
       });
 
       const unsubRemoved = onChildRemoved(locsRef, (snapshot) => {
