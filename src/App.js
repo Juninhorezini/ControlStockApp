@@ -4054,8 +4054,6 @@ const saveProduct = async () => {
         {showSecuritySettings && isAdmin() && (
           <UserManagementModal
             user={user}
-            userNames={userNames}
-            setUserNames={setUserNames}
             setShowSecuritySettings={setShowSecuritySettings}
             isMobile={isMobile}
           />

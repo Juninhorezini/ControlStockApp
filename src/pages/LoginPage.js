@@ -3,13 +3,14 @@ import { Mail, Lock, AlertCircle, Loader, Package } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 
 export function LoginPage() {
-  const { login, register, error, loading, setError } = useAuth();
+  const { login, register, registerWithRole, error, loading, setError } = useAuth();
   const [isRegistering, setIsRegistering] = useState(false);
   const [form, setForm] = useState({
     email: '',
     password: '',
     confirmPassword: '',
-    username: ''
+    username: '',
+    role: 'user'
   });
   const [localError, setLocalError] = useState('');
 
@@ -56,7 +57,7 @@ export function LoginPage() {
 
     try {
       if (isRegistering) {
-        await register(form.email, form.password, form.username);
+        await registerWithRole(form.email, form.password, form.username, form.role);
       } else {
         await login(form.email, form.password);
       }
@@ -108,6 +109,22 @@ export function LoginPage() {
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600"
                   disabled={loading}
                 />
+              </div>
+            )}
+
+            {isRegistering && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Tipo de Conta</label>
+                <select
+                  name="role"
+                  value={form.role}
+                  onChange={handleChange}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600"
+                  disabled={loading}
+                >
+                  <option value="user">Usuário (acesso normal)</option>
+                  <option value="admin">Administrador (acesso total)</option>
+                </select>
               </div>
             )}
 
