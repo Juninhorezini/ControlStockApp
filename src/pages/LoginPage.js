@@ -9,7 +9,7 @@ export function LoginPage() {
     email: '',
     password: '',
     confirmPassword: '',
-    displayName: ''
+    username: ''
   });
   const [localError, setLocalError] = useState('');
 
@@ -38,8 +38,8 @@ export function LoginPage() {
       return false;
     }
     if (isRegistering) {
-      if (!form.displayName.trim()) {
-        setLocalError('Nome obrigatório');
+      if (!form.username.trim()) {
+        setLocalError('Nome de usuário obrigatório');
         return false;
       }
       if (form.password !== form.confirmPassword) {
@@ -56,7 +56,7 @@ export function LoginPage() {
 
     try {
       if (isRegistering) {
-        await register(form.email, form.password, form.displayName);
+        await register(form.email, form.password, form.username);
       } else {
         await login(form.email, form.password);
       }
@@ -98,13 +98,13 @@ export function LoginPage() {
 
             {isRegistering && (
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Nome</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Nome de usuário (único)</label>
                 <input
                   type="text"
-                  name="displayName"
-                  value={form.displayName}
+                  name="username"
+                  value={form.username}
                   onChange={handleChange}
-                  placeholder="Seu nome"
+                  placeholder="nome_unico"
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600"
                   disabled={loading}
                 />

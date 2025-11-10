@@ -5,7 +5,11 @@ import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   signOut,
-  updateProfile
+  updateProfile,
+  database,
+  ref,
+  get,
+  set
 } from '../firebaseConfig';
 
 export const AuthContext = createContext();
@@ -33,16 +37,43 @@ export function AuthProvider({ children }) {
     return () => unsubscribe();
   }, []);
 
-  const register = async (email, password, displayName) => {
+  const register = async (email, password, username) => {
     try {
       setError(null);
+
+      const normalized = (username || '').trim();
+      const usernameToUse = normalized || email.split('@')[0];
+
+      // Check uniqueness in Realtime Database under /usernames/{username} (case-sensitive)
+      const usernameRef = ref(database, `usernames/${usernameToUse}`);
+      const usernameSnap = await get(usernameRef);
+      if (usernameSnap && usernameSnap.exists()) {
+        const msg = 'Nome de usuário já existe';
+        setError(msg);
+        throw new Error(msg);
+      }
+
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+
+      // Set Firebase Auth displayName to username
       await updateProfile(userCredential.user, {
-        displayName: displayName || email.split('@')[0]
+        displayName: usernameToUse
       });
+
+      // Save profile in Realtime Database
+      const profilesRef = ref(database, `users/${userCredential.user.uid}`);
+      await set(profilesRef, {
+        username: usernameToUse,
+        displayName: usernameToUse,
+        email: email
+      });
+
+      // Save reverse mapping username -> uid
+      await set(usernameRef, userCredential.user.uid);
+
       return userCredential.user;
     } catch (err) {
-      const msg = getErrorMessage(err.code);
+      const msg = err.message || getErrorMessage(err.code);
       setError(msg);
       throw new Error(msg);
     }

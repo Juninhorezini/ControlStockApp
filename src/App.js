@@ -156,6 +156,27 @@ const StockControlApp = () => {
       }));
     }
   }, [user.id, user.name, setUserNames]);
+
+  // Carregar nomes de usuários do backend (/users) e popular userNames
+  useEffect(() => {
+    let mounted = true;
+    const loadUserNames = async () => {
+      try {
+        const usersRef = ref(database, 'users');
+        const snap = await get(usersRef);
+        const data = snap.val() || {};
+        const mapped = {};
+        Object.entries(data).forEach(([uid, info]) => {
+          mapped[uid] = info.displayName || info.username || '';
+        });
+        if (mounted) setUserNames(prev => ({ ...mapped, ...prev }));
+      } catch (err) {
+        console.warn('Não foi possível carregar usuários do backend:', err);
+      }
+    };
+    loadUserNames();
+    return () => { mounted = false; };
+  }, [setUserNames]);
   
   // Estados para gerenciar administradores
   const [showAddAdmin, setShowAddAdmin] = useState(false);
@@ -224,16 +245,28 @@ const StockControlApp = () => {
       securitySettings
     });
 
+    // Se userId for um objeto metadata (ex: { uid, displayName }), usar displayName
+    if (userId && typeof userId === 'object') {
+      if (userId.displayName) return userId.displayName;
+      if (userId.uid && userNames[userId.uid]) return userNames[userId.uid];
+    }
+
     // Se não temos um userId, retornar o nome do usuário atual
     if (!userId) {
       console.log('⚠️ userId vazio, usando nome do usuário atual:', user.name);
       return user.name;
     }
     
-    // Se temos um nome personalizado no userNames, usar ele
+    // Se temos um nome personalizado no userNames com key=userId, usar ele
     if (userNames[userId]) {
       console.log('✅ Nome encontrado em userNames:', userNames[userId]);
       return userNames[userId];
+    }
+
+    // Se o userId já for um nome (valor) presente em userNames, retorná-lo diretamente
+    if (Object.values(userNames || {}).includes(userId)) {
+      console.log('✅ userId parece já ser um nome de usuário, retornando:', userId);
+      return userId;
     }
     
     // Se o userId é o do usuário atual, usar o nome dele
@@ -1251,8 +1284,9 @@ const fetchLocationsFromFirebase = async (sku, color) => {
           try {
             const locSku = loc.sku;
             const locColor = loc.color;
-            const updatedBy = loc.metadata?.updated_by;
-            if (!updatedBy || updatedBy !== user.id) {
+            const updatedByRaw = loc.metadata?.updated_by;
+            const updatedBy = (typeof updatedByRaw === 'string') ? updatedByRaw : (updatedByRaw?.displayName || (updatedByRaw?.uid ? userNames?.[updatedByRaw.uid] : null));
+            if (!updatedBy || updatedBy !== user.name) {
               (async () => {
                 const backendSnapshot = await fetchLocationsFromFirebase(locSku, locColor);
                 const lastUpdaterId = backendSnapshot?.lastUpdatedBy;
@@ -1290,8 +1324,9 @@ const fetchLocationsFromFirebase = async (sku, color) => {
           try {
             const locSku = loc.sku;
             const locColor = loc.color;
-            const updatedBy = loc.metadata?.updated_by;
-            if (!updatedBy || updatedBy !== user.id) {
+            const updatedByRaw = loc.metadata?.updated_by;
+            const updatedBy = (typeof updatedByRaw === 'string') ? updatedByRaw : (updatedByRaw?.displayName || (updatedByRaw?.uid ? userNames?.[updatedByRaw.uid] : null));
+            if (!updatedBy || updatedBy !== user.name) {
               (async () => {
                 const backendSnapshot = await fetchLocationsFromFirebase(locSku, locColor);
                 const lastUpdaterId = backendSnapshot?.lastUpdatedBy;
@@ -1852,12 +1887,12 @@ const fetchLocationsFromFirebase = async (sku, color) => {
           metadata: {
             created_at: Date.now(),
             updated_at: Date.now(),
-            created_by: user.id,
-            updated_by: user.id
+            created_by: user.name,
+            updated_by: user.name
           }
         };
 
-        await set(ref(database, `locations/${locationId}`), { ...locationData, ...addUserMetadata(authUser) });
+  await set(ref(database, `locations/${locationId}`), locationData);
         console.log('💾 Firebase: Location salva');
       }
     } catch (err) {
@@ -1959,8 +1994,8 @@ const fetchLocationsFromFirebase = async (sku, color) => {
           metadata: {
             created_at: Date.now(),
             updated_at: Date.now(),
-            created_by: user.id,
-            updated_by: user.id
+            created_by: user.name,
+            updated_by: user.name
           }
         };
 
@@ -2027,7 +2062,7 @@ const saveProduct = async () => {
         ...editingProduct,
         colors: validColors,
         lastModified: new Date().toISOString(),
-        modifiedBy: user.id
+        modifiedBy: user.name
       };
       
       const newProducts = {
