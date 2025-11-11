@@ -14,6 +14,9 @@ import {
 
 export const AuthContext = createContext();
 
+// IMPORTANT: Replace with your actual Cloud Function URL after deployment
+const CLOUD_FUNCTION_URL = process.env.REACT_APP_CLOUD_FUNCTION_URL || 'YOUR_CLOUD_FUNCTION_URL_HERE';
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -129,18 +132,31 @@ export function AuthProvider({ children }) {
     }
   };
 
+  // NEW: Update user role via backend
   const updateUserRole = async (uid, newRole) => {
     try {
       if (!['admin', 'user'].includes(newRole)) {
         throw new Error('Role inválido');
       }
-      const profilesRef = ref(database, `users/${uid}`);
-      const userSnap = await get(profilesRef);
-      if (!userSnap.exists()) {
-        throw new Error('Usuário não encontrado');
+
+      // Get current user's ID token for authentication
+      const idToken = await auth.currentUser.getIdToken();
+
+      const response = await fetch(`${CLOUD_FUNCTION_URL}/api/updateUserRole`, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${idToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ uid, newRole })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Erro ao atualizar role');
       }
-      const userData = userSnap.val();
-      await set(profilesRef, { ...userData, role: newRole });
+
       return true;
     } catch (err) {
       const msg = err.message || 'Erro ao atualizar role';
@@ -149,23 +165,26 @@ export function AuthProvider({ children }) {
     }
   };
 
+  // NEW: Delete user via backend (Auth + DB)
   const deleteUser = async (uid) => {
     try {
-      // Nota: deletar de /users/{uid} não deleta a conta Firebase Auth
-      // Para deletar completamente, seria necessário usar Firebase Admin SDK no backend
-      const profilesRef = ref(database, `users/${uid}`);
-      const userSnap = await get(profilesRef);
-      if (!userSnap.exists()) {
-        throw new Error('Usuário não encontrado');
+      // Get current user's ID token for authentication
+      const idToken = await auth.currentUser.getIdToken();
+
+      const response = await fetch(`${CLOUD_FUNCTION_URL}/api/deleteUser/${uid}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${idToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Erro ao deletar usuário');
       }
-      const userData = userSnap.val();
-      // Delete the user profile
-      await set(profilesRef, null);
-      // Delete username mapping
-      if (userData.username) {
-        const usernameRef = ref(database, `usernames/${userData.username}`);
-        await set(usernameRef, null);
-      }
+
       return true;
     } catch (err) {
       const msg = err.message || 'Erro ao deletar usuário';
