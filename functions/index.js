@@ -69,7 +69,103 @@ app.post('/createUser', verifyAdmin, async (req, res) => {
   }
 });
 
+// DELETE /deleteUser/:uid - delete user from Auth + DB + username mapping
+app.delete('/deleteUser/:uid', verifyAdmin, async (req, res) => {
+  try {
+    const { uid } = req.params;
+
+    if (!uid) {
+      return res.status(400).json({ error: 'Missing uid parameter' });
+    }
+
+    // Get user data before deletion to retrieve username
+    const userSnap = await admin.database().ref(`users/${uid}`).once('value');
+    const userData = userSnap.val();
+
+    if (!userData) {
+      return res.status(404).json({ error: 'User not found in database' });
+    }
+
+    // 1. Delete from Firebase Auth
+    try {
+      await admin.auth().deleteUser(uid);
+    } catch (authErr) {
+      console.error('Error deleting from Auth:', authErr);
+      // Continue even if Auth delete fails (user might already be deleted)
+    }
+
+    // 2. Delete from Realtime Database
+    await admin.database().ref(`users/${uid}`).remove();
+
+    // 3. Delete username mapping
+    if (userData.username) {
+      await admin.database().ref(`usernames/${userData.username}`).remove();
+    }
+
+    return res.json({ success: true, uid, message: 'User deleted successfully' });
+  } catch (err) {
+    console.error('deleteUser error:', err);
+    return res.status(500).json({ error: err.message || 'internal_error' });
+  }
+});
+
+// PATCH /updateUserRole - update user role in database
+app.patch('/updateUserRole', verifyAdmin, async (req, res) => {
+  try {
+    const { uid, newRole } = req.body || {};
+
+    if (!uid || !newRole) {
+      return res.status(400).json({ error: 'Missing uid or newRole' });
+    }
+
+    if (!['admin', 'user'].includes(newRole)) {
+      return res.status(400).json({ error: 'Invalid role. Must be admin or user' });
+    }
+
+    // Check if user exists
+    const userRef = admin.database().ref(`users/${uid}`);
+    const userSnap = await userRef.once('value');
+
+    if (!userSnap.exists()) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Update role
+    await userRef.update({ 
+      role: newRole,
+      updatedAt: new Date().toISOString()
+    });
+
+    return res.json({ success: true, uid, newRole, message: 'Role updated successfully' });
+  } catch (err) {
+    console.error('updateUserRole error:', err);
+    return res.status(500).json({ error: err.message || 'internal_error' });
+  }
+});
+
+// GET /listUsers - list all users from database
+app.get('/listUsers', verifyAdmin, async (req, res) => {
+  try {
+    const usersSnap = await admin.database().ref('users').once('value');
+    const usersData = usersSnap.val() || {};
+
+    const users = Object.entries(usersData).map(([uid, data]) => ({
+      uid,
+      ...data
+    }));
+
+    return res.json({ 
+      success: true,
+      users,
+      count: users.length
+    });
+  } catch (err) {
+    console.error('listUsers error:', err);
+    return res.status(500).json({ error: err.message || 'internal_error' });
+  }
+});
+
 // Health check
-app.get('/_health', (req, res) => res.json({ ok: true }));
+app.get('/_health', (req, res) => res.json({ ok: true, timestamp: new Date().toISOString() }));
 
 exports.api = functions.https.onRequest(app);
