@@ -4097,6 +4097,14 @@ const saveProduct = async () => {
                   >
                     🖨️ Imprimir
                   </button>
+                  {/* Botão fechar */}
+                  <button
+                    onClick={() => setShowReportModal(false)}
+                    className="flex items-center gap-2 px-3 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 min-h-[40px] text-sm"
+                  >
+                    <X className="w-4 h-4" />
+                    Fechar
+                  </button>
                 </div>
               </div>
               
