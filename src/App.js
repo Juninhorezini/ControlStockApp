@@ -155,7 +155,7 @@ const StockControlApp = () => {
         ...updates
       }));
     }
-  }, [user.id, user.name, setUserNames]);
+  }, [user.id, user.name]);
 
   // Carregar nomes de usuários do backend (/users) e popular userNames
   useEffect(() => {
@@ -176,7 +176,7 @@ const StockControlApp = () => {
     };
     loadUserNames();
     return () => { mounted = false; };
-  }, [setUserNames]);
+  }, []);
   
   // Estados para gerenciar administradores
   const [showAddAdmin, setShowAddAdmin] = useState(false);
