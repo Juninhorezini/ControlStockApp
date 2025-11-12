@@ -18,7 +18,7 @@ const SHEETS_API_URL = "https://script.google.com/macros/s/AKfycbz6K-U6nwjaqh9-z
 
 const useStoredState = (key, initialValue) => {
   const [state, setState] = React.useState(() => {
-    try {
+try {
       const item = window.localStorage.getItem(key);
       return item ? JSON.parse(item) : initialValue;
     } catch (error) {
@@ -319,6 +319,7 @@ const StockControlApp = () => {
 
   // Async resolver: given a UID, username string, or metadata object, try to return a display name.
   const lastUpdaterName = lastUpdaterId ? (userNames?.[lastUpdaterId] || lastUpdaterId) : null;
+  // Async resolver: given a UID, username string, or metadata object, try to return a display name.
   const resolveUserDisplayName = async (idOrObj) => {
     if (!idOrObj) return null;
     // If object with displayName
