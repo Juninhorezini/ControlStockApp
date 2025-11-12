@@ -318,6 +318,7 @@ const StockControlApp = () => {
   };
 
   // Async resolver: given a UID, username string, or metadata object, try to return a display name.
+  const lastUpdaterName = lastUpdaterId ? (userNames?.[lastUpdaterId] || lastUpdaterId) : null;
   const resolveUserDisplayName = async (idOrObj) => {
     if (!idOrObj) return null;
     // If object with displayName
@@ -1083,7 +1084,7 @@ const fetchLocationsFromFirebase = async (sku, color) => {
         <div class="info">
           <p><strong>Data:</strong> ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR')}</p>
           <p><strong>Total de itens:</strong> ${reportData.length}</p>
-          <p><strong>Sistema:</strong> JR Localização de Estoque</p>
+<p><strong>Sistema:</strong> JR Localização de Estoque</p>
         </div>
         
         <table>
@@ -1345,7 +1346,7 @@ const fetchLocationsFromFirebase = async (sku, color) => {
               (async () => {
                 const backendSnapshot = await fetchLocationsFromFirebase(locSku, locColor);
                 const lastUpdaterId = backendSnapshot?.lastUpdatedBy;
-                const lastUpdaterName = lastUpdaterId ? await resolveUserDisplayName(lastUpdaterId) : null;
+                const lastUpdaterName = lastUpdaterId ? (userNames?.[lastUpdaterId] || lastUpdaterId) : null;
                 syncSingleProductWithSheets(locSku, locColor, backendSnapshot, lastUpdaterName);
               })();
             }
