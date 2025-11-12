@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react';
 import { database, ref, onValue, set, update, remove, runTransaction, push } from '../firebaseConfig';
 
+// IMPORTANT: Replace with your actual Google Apps Script Web App URL
+const SPREADSHEET_WEB_APP_URL = process.env.REACT_APP_SPREADSHEET_WEB_APP_URL || 'YOUR_GOOGLE_APPS_SCRIPT_WEB_APP_URL_HERE';
+
 // Hook para sincronizar com Firebase
 export const useFirebaseSync = () => {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
@@ -75,10 +78,55 @@ export const useFirebaseSync = () => {
     try {
       const historyRef = ref(database, 'history');
       const newHistoryRef = push(historyRef);
-      await set(newHistoryRef, {
+      
+      const historyData = {
         ...entry,
-        timestamp: Date.now()
-      });
+        timestamp: Date.now(),
+        // Ensure these fields are present, even if empty, for the Cloud Function
+        quantidadeTotal: entry.quantidadeTotal || 0,
+        localizacoes: entry.localizacoes || [],
+        ultimaLocalizacao: entry.ultimaLocalizacao || { corredor: '', prateleira: '', localizacao: '' }
+      };
+
+      console.log('Adding history entry to Firebase:', historyData);
+      await set(newHistoryRef, historyData);
+
+      // NEW: Send data to Google Apps Script directly from frontend
+      if (SPREADSHEET_WEB_APP_URL && SPREADSHEET_WEB_APP_URL !== 'YOUR_GOOGLE_APPS_SCRIPT_WEB_APP_URL_HERE') {
+        try {
+          const payload = {
+            sku: historyData.sku,
+            cor: historyData.cor,
+            quantidade: historyData.quantidadeTotal,
+            usuario: historyData.usuario,
+            localizacoes: JSON.stringify(historyData.localizacoes || []),
+            corredor: historyData.ultimaLocalizacao?.corredor,
+            prateleira: historyData.ultimaLocalizacao?.prateleira,
+            localizacao: historyData.ultimaLocalizacao?.localizacao
+          };
+
+          const response = await fetch(SPREADSHEET_WEB_APP_URL, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/x-www-form-urlencoded'
+            },
+            body: new URLSearchParams(payload).toString()
+          });
+
+          if (!response.ok) {
+            const errorText = await response.text();
+            console.error(`Google Apps Script responded with status ${response.status}: ${errorText}`);
+          } else {
+            const result = await response.json();
+            console.log('Successfully synced history entry to Google Sheet:', result);
+          }
+        } catch (sheetError) {
+          console.error('Error syncing history to Google Sheet:', sheetError);
+        }
+      } else {
+        console.warn('SPREADSHEET_WEB_APP_URL is not configured. Skipping Google Sheet update.');
+      }
+
       return { success: true };
     } catch (error) {
       console.error('Firebase history error:', error);

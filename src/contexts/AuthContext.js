@@ -25,11 +25,26 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       if (currentUser) {
-        setUser({
-          uid: currentUser.uid,
-          email: currentUser.email,
-          displayName: currentUser.displayName || 'Usuario',
-          photoURL: currentUser.photoURL
+        // Fetch user role from Realtime Database
+        const userRef = ref(database, `users/${currentUser.uid}`);
+        get(userRef).then((snapshot) => {
+          const userData = snapshot.val();
+          setUser({
+            uid: currentUser.uid,
+            email: currentUser.email,
+            displayName: currentUser.displayName || 'Usuario',
+            photoURL: currentUser.photoURL,
+            role: userData ? userData.role : 'user' // Default to 'user' if role not found
+          });
+        }).catch((err) => {
+          console.error("Error fetching user role:", err);
+          setUser({
+            uid: currentUser.uid,
+            email: currentUser.email,
+            displayName: currentUser.displayName || 'Usuario',
+            photoURL: currentUser.photoURL,
+            role: 'user' // Fallback to 'user' on error
+          });
         });
       } else {
         setUser(null);
