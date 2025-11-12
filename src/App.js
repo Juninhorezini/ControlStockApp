@@ -318,8 +318,6 @@ const StockControlApp = () => {
   };
 
   // Async resolver: given a UID, username string, or metadata object, try to return a display name.
-  const lastUpdaterName = lastUpdaterId ? (userNames?.[lastUpdaterId] || lastUpdaterId) : null;
-  // Async resolver: given a UID, username string, or metadata object, try to return a display name.
   const resolveUserDisplayName = async (idOrObj) => {
     if (!idOrObj) return null;
     // If object with displayName
