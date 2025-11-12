@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { database, ref, onValue, set, update, remove, runTransaction, push } from '../firebaseConfig';
 
 // IMPORTANT: Replace with your actual Google Apps Script Web App URL
-const SPREADSHEET_WEB_APP_URL = process.env.REACT_APP_SPREADSHEET_WEB_APP_URL || 'YOUR_GOOGLE_APPS_SCRIPT_WEB_APP_URL_HERE';
+const SPREADSHEET_WEB_APP_URL = process.env.REACT_APP_SPREADSHEET_WEB_APP_URL || 'https://script.google.com/macros/s/AKfycbyTxPtFYoAuwLA2aR6YXoprW7Nkr0v6Pkp9lt-APWmcJq9I91jCY1PsF2_EKakbzFtcyw/exec';
 
 // Hook para sincronizar com Firebase
 export const useFirebaseSync = () => {
