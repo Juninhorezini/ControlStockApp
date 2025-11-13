@@ -4421,18 +4421,30 @@ const saveProduct = async () => {
                     </p>
                   </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      URL do Google Apps Script Web App:
-                    </label>
-                    <input
-                      type="url"
-                      value={sheetsUrl}
-                      onChange={(e) => setSheetsUrl(e.target.value)}
-                      placeholder="https://script.google.com/macros/s/.../exec"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
-                    />
-                  </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    URL do Google Apps Script Web App:
+                  </label>
+                  <input
+                    type="url"
+                    value={sheetsUrl}
+                    onChange={async (e) => {
+                      const url = e.target.value;
+                      try {
+                        setSheetsUrl(url);
+                        const sRef = ref(database, 'settings/sheetsUrl');
+                        await set(sRef, url);
+                        setSyncStatus('URL da planilha atualizada');
+                        setTimeout(() => setSyncStatus(''), 3000);
+                      } catch (err) {
+                        setSyncStatus('Erro ao salvar URL da planilha');
+                        setTimeout(() => setSyncStatus(''), 3000);
+                      }
+                    }}
+                    placeholder="https://script.google.com/macros/s/.../exec"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+                  />
+                </div>
 
                   {syncStatus && (
                     <div className={`p-3 rounded-md text-sm ${
