@@ -192,6 +192,17 @@ const StockControlApp = () => {
   const [sheetsUrl, setSheetsUrl] = useStoredState('sheetsUrl', SHEETS_API_URL);
   const [syncStatus, setSyncStatus] = useState('');
 
+  useEffect(() => {
+    (async () => {
+      try {
+        const sRef = ref(database, 'settings/sheetsUrl');
+        const snap = await get(sRef);
+        const val = snap.val();
+        if (val && typeof val === 'string') setSheetsUrl(val);
+      } catch (e) {}
+    })();
+  }, []);
+
   const isAdmin = () => {
     return authUser?.role === 'admin';
   };
@@ -704,11 +715,31 @@ const syncSingleProductWithSheets = async (sku, color = '', productsSnapshot = n
         localizacoes: JSON.stringify(localizacoesArray)
       });
 
-      const script = document.createElement('script');
-      script.src = `${sheetsUrl}?${params.toString()}`;
-      document.body.appendChild(script);
-
-      setTimeout(() => document.body.removeChild(script), 5000);
+      try {
+        const resp = await fetch(sheetsUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: params.toString()
+        });
+        if (!resp.ok) throw new Error(String(resp.status));
+      } catch (e) {
+        await new Promise((resolve, reject) => {
+          const script = document.createElement('script');
+          script.src = `${sheetsUrl}?${params.toString()}`;
+          script.onerror = () => { setSyncStatus('Rede bloqueada para Google Sheets'); reject(new Error('jsonp_failed')); };
+          script.onload = () => resolve();
+          document.body.appendChild(script);
+          setTimeout(() => { try { document.body.removeChild(script); } catch (err) {} }, 5000);
+        }).catch(() => {
+          try {
+            const body = params.toString();
+            if (navigator.sendBeacon) {
+              const blob = new Blob([body], { type: 'application/x-www-form-urlencoded' });
+              navigator.sendBeacon(sheetsUrl, blob);
+            }
+          } catch (err) {}
+        });
+      }
 
     } catch (error) {
       console.error('❌ Sync error:', error);
@@ -813,32 +844,49 @@ const fetchLocationsFromFirebase = async (sku, color) => {
       
       for (const product of consolidatedProducts) {
         try {
-          // 🆕 Enviar apenas a ÚLTIMA localização para a aba Prateleiras
-          // E o array completo para registrar no Histórico
           const params = new URLSearchParams({
             sku: product.sku.trim(),
             cor: product.color.trim(),
-            quantidade: product.quantity,  // Total consolidado
+            quantidade: product.quantity,
             usuario: user?.name || 'App React',
-            // Dados da ÚLTIMA localização (para aba Prateleiras)
             corredor: product.lastLocation.corredor,
             prateleira: product.lastLocation.prateleira,
             localizacao: product.lastLocation.localizacao,
-            // Array completo de localizações (para aba Histórico)
             localizacoes: JSON.stringify(product.localizacoes)
           });
 
-          const script = document.createElement('script');
-          script.src = `${sheetsUrl}?${params.toString()}`;
-          document.body.appendChild(script);
-          
-          await new Promise(resolve => setTimeout(resolve, 500));
-          
-          setTimeout(() => document.body.removeChild(script), 3000);
-          successCount++;
-          
+          try {
+            const resp = await fetch(sheetsUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+              body: params.toString()
+            });
+            if (!resp.ok) throw new Error(String(resp.status));
+            successCount++;
+          } catch (e) {
+            await new Promise((resolve, reject) => {
+              const script = document.createElement('script');
+              script.src = `${sheetsUrl}?${params.toString()}`;
+              script.onerror = () => { setSyncStatus('Rede bloqueada para Google Sheets'); reject(new Error('jsonp_failed')); };
+              script.onload = () => resolve();
+              document.body.appendChild(script);
+              setTimeout(() => { try { document.body.removeChild(script); } catch (err) {} }, 3000);
+            }).then(() => { successCount++; }).catch(() => {
+              try {
+                const body = params.toString();
+                if (navigator.sendBeacon) {
+                  const blob = new Blob([body], { type: 'application/x-www-form-urlencoded' });
+                  navigator.sendBeacon(sheetsUrl, blob);
+                  successCount++;
+                } else {
+                  errorCount++;
+                }
+              } catch (err) {
+                errorCount++;
+              }
+            });
+          }
         } catch (error) {
-          console.error(`Erro ao sincronizar ${product.sku}-${product.color}:`, error);
           errorCount++;
         }
       }
