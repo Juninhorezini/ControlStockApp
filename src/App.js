@@ -192,40 +192,8 @@ const StockControlApp = () => {
   const [sheetsUrl, setSheetsUrl] = useStoredState('sheetsUrl', SHEETS_API_URL);
   const [syncStatus, setSyncStatus] = useState('');
 
-  // Sistema de permissões - CORRIGIDO
   const isAdmin = () => {
-    // IDs FIXOS DE ADMINISTRADORES
-    const FIXED_ADMIN_IDS = ['JkioQE_QZznu_5dLJx_ez', 'kLYGhMzg362k-18DKc9dB'];
-    
-    // Verificar se é um admin fixo
-    if (FIXED_ADMIN_IDS.includes(user.id)) {
-      return true;
-    }
-    
-    // PRIMEIRO ACESSO: Se não há admins definidos, o usuário atual vira admin
-    if (!securitySettings.adminUsers || securitySettings.adminUsers.length === 0) {
-      // Auto-promover APENAS no primeiro acesso
-      const updatedSettings = {
-        ...securitySettings,
-        adminUsers: [user.id, ...FIXED_ADMIN_IDS]
-      };
-      setSecuritySettings(updatedSettings);
-      return true;
-    }
-    
-    // Garantir que os IDs fixos estejam sempre na lista
-    const currentAdmins = securitySettings.adminUsers || [];
-    const needsUpdate = FIXED_ADMIN_IDS.some(id => !currentAdmins.includes(id));
-    if (needsUpdate) {
-      const updatedSettings = {
-        ...securitySettings,
-        adminUsers: [...new Set([...currentAdmins, ...FIXED_ADMIN_IDS])]
-      };
-      setSecuritySettings(updatedSettings);
-    }
-    
-    // VERIFICAÇÃO NORMAL: usuário está na lista de admins?
-    return securitySettings.adminUsers.includes(user.id) || FIXED_ADMIN_IDS.includes(user.id);
+    return authUser?.role === 'admin';
   };
 
   const canEditStructure = () => isAdmin();
