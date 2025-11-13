@@ -127,7 +127,7 @@ const StockControlApp = () => {
     deleteProtection: 'password',
     adminUserId: '',
     deletePassword: 'admin123',
-    adminUsers: ['JkioQE_QZznu_5dLJx_ezXkCe85NccHRLn2El58iG0mKrKvn1', 'kLYGhMzg362k-18DKc9dB'] // Lista de IDs dos administradores (incluindo IDs fixos)
+    adminUsers: ['JkioQE_QZznu_5dLJx_ezXkCe85NccHRLn2El58iG0mKrKvn1', 'c4WdOmixXqYhBI3632Nn51GxuVs2'] // Lista de IDs dos administradores (incluindo IDs fixos)
   });
 
   // Sistema de nomes personalizados para usuários
