@@ -2398,39 +2398,33 @@ const saveProduct = async () => {
     const container = document.querySelector('.overflow-x-auto');
     if (container) {
       container.style.touchAction = '';
+      container.style.overscrollBehavior = '';
     }
     document.body.style.touchAction = '';
+    document.body.style.overscrollBehavior = '';
+    document.documentElement.style.overscrollBehavior = '';
     document.body.style.userSelect = '';
   };
 
   // Sistema Mobile SIMPLIFICADO - baseado nos critérios
   const handleMobileTouchStart = (e, row, col, product) => {
     if (!isMobile) return;
-    if (!moveModeEnabled) return;
     const target = e.target;
-    if (!target || target.dataset.handle !== 'move') return;
-    
     const touch = e.touches[0];
     const now = Date.now();
-    
-    // Resetar estados
-    resetDragStates();
-    
-    setTouchStart({ 
-      x: touch.clientX, 
-      y: touch.clientY, 
-      time: now 
-    });
-    
-    if (product) {
+    // Limpar estados de drag, manter tracking para duplo toque
+    setDraggedProduct(null);
+    setDraggedPosition(null);
+    setDragOverPosition(null);
+    setIsDragging(false);
+    setIsHolding(false);
+    setTouchStart({ x: touch.clientX, y: touch.clientY, time: now });
+    // Preparar drag somente se Modo Mover ON e toque no handle
+    if (product && moveModeEnabled && target && target.dataset && target.dataset.handle === 'move') {
       const position = { row, col, shelfId: currentShelf.id };
       setDraggedProduct(product);
       setDraggedPosition(position);
-      
-      const timeout = setTimeout(() => {
-        setIsHolding(true);
-      }, 650);
-      
+      const timeout = setTimeout(() => { setIsHolding(true); }, 650);
       setHoldTimeout(timeout);
     }
   };
@@ -2530,10 +2524,13 @@ const saveProduct = async () => {
       const container = document.querySelector('.overflow-x-auto');
       if (container) {
         container.style.touchAction = 'none';
+        container.style.overscrollBehavior = 'contain';
       } else {
         document.body.style.touchAction = 'none';
       }
       document.body.style.overflow = 'hidden';
+      document.body.style.overscrollBehavior = 'contain';
+      document.documentElement.style.overscrollBehavior = 'contain';
       document.body.style.userSelect = 'none';
     }
     
