@@ -71,6 +71,7 @@ const StockControlApp = () => {
   const [moveModeEnabled, setMoveModeEnabled] = useState(false);
   const [dragStartAllowedKey, setDragStartAllowedKey] = useState(null);
   const scrollLockYRef = useRef(0);
+  const scrollContainerRef = useRef(null);
   const [editingProduct, setEditingProduct] = useState(null);
   const [editingPosition, setEditingPosition] = useState(null);
   const [newShelfName, setNewShelfName] = useState('');
@@ -2510,6 +2511,42 @@ const saveProduct = async () => {
     };
   }, [isDragging]);
 
+  useEffect(() => {
+    try {
+      if (currentShelf && currentShelf.id) {
+        const el = document.getElementById(`shelf-container-${currentShelf.id}`);
+        scrollContainerRef.current = el || null;
+      } else {
+        scrollContainerRef.current = null;
+      }
+    } catch (e) {
+      scrollContainerRef.current = null;
+    }
+  }, [currentShelf?.id]);
+
+  useEffect(() => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    const onTouchMove = (e) => {
+      if (isDragging) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    };
+    const onWheel = (e) => {
+      if (isDragging) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    };
+    el.addEventListener('touchmove', onTouchMove, { passive: false });
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => {
+      el.removeEventListener('touchmove', onTouchMove);
+      el.removeEventListener('wheel', onWheel);
+    };
+  }, [isDragging, currentShelf?.id]);
+
   const handleMobileTouchMove = (e, row, col) => {
     if (!isMobile || !draggedProduct) return;
     
@@ -2536,10 +2573,6 @@ const saveProduct = async () => {
     
     // 2. Se está segurando e começou a arrastar = ativar drag
     if (isHolding && distance > 20 && !isDragging) {
-      const horizontalDominant = Math.abs(deltaX) >= Math.abs(deltaY) * 1.5;
-      if (!horizontalDominant) {
-        return;
-      }
       setIsDragging(true);
       e.preventDefault();
       e.stopPropagation();
