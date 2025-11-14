@@ -2389,6 +2389,10 @@ const saveProduct = async () => {
     
     // Restaurar comportamento da página
     document.body.style.overflow = '';
+    const container = document.querySelector('.overflow-x-auto');
+    if (container) {
+      container.style.touchAction = '';
+    }
     document.body.style.touchAction = '';
     document.body.style.userSelect = '';
   };
@@ -2414,11 +2418,9 @@ const saveProduct = async () => {
       setDraggedProduct(product);
       setDraggedPosition(position);
       
-      // Timer para detectar "segurar" (400ms)
       const timeout = setTimeout(() => {
         setIsHolding(true);
-        if (navigator.vibrate) navigator.vibrate(50);
-      }, 400);
+      }, 650);
       
       setHoldTimeout(timeout);
     }
@@ -2485,23 +2487,33 @@ const saveProduct = async () => {
     // LÓGICA BASEADA NOS CRITÉRIOS:
     
     // 1. Se movimento rápido e não está segurando = scroll nativo
+    if (!isHolding && distance > 8) {
+      if (holdTimeout) {
+        clearTimeout(holdTimeout);
+        setHoldTimeout(null);
+      }
+      return;
+    }
     if (!isHolding && velocity > 1.0 && distance > 20) {
-      resetDragStates();
-      return; // Permite scroll nativo
+      return;
     }
     
     // 2. Se está segurando e começou a arrastar = ativar drag
-    if (isHolding && distance > 10 && !isDragging) {
+    if (isHolding && distance > 20 && !isDragging) {
+      const horizontalDominant = Math.abs(deltaX) >= Math.abs(deltaY) * 1.5;
+      if (!horizontalDominant) {
+        return;
+      }
       setIsDragging(true);
-      
-      // Bloquear scroll nativo
       e.preventDefault();
       e.stopPropagation();
-      document.body.style.overflow = 'hidden';
-      document.body.style.touchAction = 'none';
+      const container = document.querySelector('.overflow-x-auto');
+      if (container) {
+        container.style.touchAction = 'none';
+      } else {
+        document.body.style.touchAction = 'none';
+      }
       document.body.style.userSelect = 'none';
-      
-      if (navigator.vibrate) navigator.vibrate(100);
     }
     
     // 3. Se está arrastando = controlar movimento
@@ -2555,9 +2567,14 @@ const saveProduct = async () => {
       }
     }
     
-    // 2. Se estava segurando mas não arrastou = modal movimento
+    // 2. Se estava segurando mas não arrastou = modal movimento (apenas sem deslocamento)
     else if (isHolding && !isDragging && product) {
-      openMoveModal(row, col, product);
+      const dx = touch.clientX - touchStart.x;
+      const dy = touch.clientY - touchStart.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < 6) {
+        openMoveModal(row, col, product);
+      }
     }
     
     // 3. Se foi toque rápido = duplo clique para editar
