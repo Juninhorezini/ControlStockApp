@@ -68,6 +68,8 @@ const StockControlApp = () => {
   const [showAddShelfToCorridor, setShowAddShelfToCorridor] = useState(false);
   const [selectedCorridorForNewShelf, setSelectedCorridorForNewShelf] = useState('');
   const [showEditProduct, setShowEditProduct] = useState(false);
+  const [moveModeEnabled, setMoveModeEnabled] = useState(false);
+  const [dragStartAllowedKey, setDragStartAllowedKey] = useState(null);
   const [editingProduct, setEditingProduct] = useState(null);
   const [editingPosition, setEditingPosition] = useState(null);
   const [newShelfName, setNewShelfName] = useState('');
@@ -2268,6 +2270,9 @@ const saveProduct = async () => {
   // Drag & Drop Desktop
   const handleDragStart = (e, row, col, product) => {
     if (!product || !currentShelf) return;
+    if (!moveModeEnabled) { e.preventDefault(); return; }
+    const target = e.target;
+    if (!target || target.dataset.handle !== 'move') { e.preventDefault(); return; }
     
     const position = { row, col, shelfId: currentShelf.id };
     setDraggedProduct(product);
@@ -2374,6 +2379,7 @@ const saveProduct = async () => {
     setDragOverPosition(null);
     setIsDragging(false);
     setIsHolding(false);
+    setDragStartAllowedKey(null);
     
     if (holdTimeout) {
       clearTimeout(holdTimeout);
@@ -2400,6 +2406,9 @@ const saveProduct = async () => {
   // Sistema Mobile SIMPLIFICADO - baseado nos critérios
   const handleMobileTouchStart = (e, row, col, product) => {
     if (!isMobile) return;
+    if (!moveModeEnabled) return;
+    const target = e.target;
+    if (!target || target.dataset.handle !== 'move') return;
     
     const touch = e.touches[0];
     const now = Date.now();
@@ -2474,6 +2483,17 @@ const saveProduct = async () => {
     }
   };
 
+  const checkVerticalAutoScroll = (touchY) => {
+    if (!isDragging) return;
+    const threshold = 80;
+    const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+    if (touchY < threshold) {
+      window.scrollBy({ top: -10, behavior: 'auto' });
+    } else if (viewportHeight - touchY < threshold) {
+      window.scrollBy({ top: 10, behavior: 'auto' });
+    }
+  };
+
   const handleMobileTouchMove = (e, row, col) => {
     if (!isMobile || !draggedProduct) return;
     
@@ -2513,6 +2533,7 @@ const saveProduct = async () => {
       } else {
         document.body.style.touchAction = 'none';
       }
+      document.body.style.overflow = 'hidden';
       document.body.style.userSelect = 'none';
     }
     
@@ -2521,8 +2542,8 @@ const saveProduct = async () => {
       e.preventDefault();
       e.stopPropagation();
       
-      // Auto-scroll nas bordas
       checkAutoScroll(touch.clientX);
+      checkVerticalAutoScroll(touch.clientY);
       
       // Detectar posição alvo
       const element = document.elementFromPoint(touch.clientX, touch.clientY);
@@ -2757,7 +2778,7 @@ const saveProduct = async () => {
           <div
             key={key}
             data-position={key}
-            draggable={!isMobile && !!product}
+            draggable={!isMobile && !!product && moveModeEnabled && dragStartAllowedKey === key}
             onClick={isMobile ? undefined : () => openEditProduct(row, col)}
             onTouchStart={isMobile ? (e) => handleMobileTouchStart(e, row, col, product) : undefined}
             onTouchMove={isMobile ? (e) => handleMobileTouchMove(e, row, col) : undefined}
@@ -2796,7 +2817,7 @@ const saveProduct = async () => {
               WebkitUserSelect: 'none',
               WebkitTouchCallout: 'none'
             }}
-            title={product ? `${isMobile ? 'Toque e arraste ou toque longo' : 'Arraste'} para mover` : 'Toque para adicionar produto'}
+            title={product ? `${moveModeEnabled ? (isMobile ? 'Use o handle para mover' : 'Arraste pelo handle') : 'Ative Modo Mover para arrastar'}` : 'Toque para adicionar produto'}
           >
             {product && typeof product === 'object' && product.sku ? (
               <>
@@ -2809,6 +2830,16 @@ const saveProduct = async () => {
                 <div className={`text-gray-500 text-center leading-tight ${isMobile ? 'text-xs' : 'text-xs'}`}>
                   {(product.colors && Array.isArray(product.colors) ? product.colors.length : 0)} cor{((product.colors && Array.isArray(product.colors) ? product.colors.length : 0) !== 1) ? 'es' : ''}
                 </div>
+                {moveModeEnabled && (
+                  <button
+                    type="button"
+                    data-handle="move"
+                    onMouseDown={() => setDragStartAllowedKey(key)}
+                    className={`${isMobile ? 'mt-1' : 'mt-1'} px-2 py-1 text-xs rounded bg-blue-100 text-blue-700 border border-blue-300`}
+                  >
+                    Mover
+                  </button>
+                )}
               </>
             ) : (
               <Plus className={`text-gray-400 ${isMobile ? 'w-5 h-5' : 'w-6 h-6'}`} />
@@ -2907,6 +2938,15 @@ const saveProduct = async () => {
               >
                 <Grid className="w-4 h-4" />
                 <span className="hidden sm:inline">Google Sheets</span>
+              </button>
+
+              <button
+                onClick={() => setMoveModeEnabled(v => !v)}
+                className={`flex items-center gap-2 px-3 py-2 text-sm rounded-lg transition-colors min-h-[44px] ${moveModeEnabled ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-blue-100 text-blue-700 hover:bg-blue-200'}`}
+                title={moveModeEnabled ? 'Modo Mover: ativo' : 'Modo Mover: desativado'}
+              >
+                <Shield className="w-4 h-4" />
+                <span className="hidden sm:inline">{moveModeEnabled ? 'Mover: ON' : 'Mover: OFF'}</span>
               </button>
 
               {/* Botão de Backup */}
