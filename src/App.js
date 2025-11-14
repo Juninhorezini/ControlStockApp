@@ -2421,13 +2421,27 @@ const saveProduct = async () => {
     setIsDragging(false);
     setIsHolding(false);
     setTouchStart({ x: touch.clientX, y: touch.clientY, time: now });
-    // Preparar drag somente se Modo Mover ON e toque no handle
-    if (product && moveModeEnabled && target && target.dataset && target.dataset.handle === 'move') {
-      const position = { row, col, shelfId: currentShelf.id };
-      setDraggedProduct(product);
-      setDraggedPosition(position);
-      const timeout = setTimeout(() => { setIsHolding(true); }, 650);
-      setHoldTimeout(timeout);
+    if (moveModeEnabled) {
+      if (product && !moveSourcePosition) {
+        const timeout = setTimeout(() => {
+          setIsHolding(true);
+          setMoveSourcePosition({ row, col, shelfId: currentShelf.id, shelfName: currentShelf.name, product });
+        }, 500);
+        setHoldTimeout(timeout);
+      } else if (!product && moveSourcePosition) {
+        const timeout = setTimeout(() => {
+          setIsHolding(true);
+        }, 500);
+        setHoldTimeout(timeout);
+      }
+    } else {
+      if (product) {
+        const position = { row, col, shelfId: currentShelf.id };
+        setDraggedProduct(product);
+        setDraggedPosition(position);
+        const timeout = setTimeout(() => { setIsHolding(true); }, 650);
+        setHoldTimeout(timeout);
+      }
     }
   };
 
@@ -2558,6 +2572,10 @@ const saveProduct = async () => {
     const velocity = distance / Math.max(timeDiff, 1);
     
     // LÓGICA BASEADA NOS CRITÉRIOS:
+
+    if (moveModeEnabled) {
+      return;
+    }
     
     // 1. Se movimento rápido e não está segurando = scroll nativo
     if (!isHolding && distance > 8) {
@@ -2624,6 +2642,17 @@ const saveProduct = async () => {
     const duration = now - touchStart.time;
     
     // LÓGICA BASEADA NOS CRITÉRIOS:
+
+    if (moveModeEnabled) {
+      if (isHolding && moveSourcePosition && !product) {
+        const shelfId = currentShelf.id;
+        setMoveTargetShelf(String(shelfId));
+        setMoveTargetPosition({ row, col, label: `L${currentShelf.rows - row}:C${col + 1}`, key: `${shelfId}-${row}-${col}` });
+        executeMoveProduct();
+        resetDragStates();
+        return;
+      }
+    }
     
     // 1. Se estava arrastando = executar drop
     if (isDragging && draggedProduct) {
@@ -2640,7 +2669,7 @@ const saveProduct = async () => {
     }
     
     // 2. Se estava segurando mas não arrastou = modal movimento (apenas sem deslocamento)
-    else if (isHolding && !isDragging && product) {
+    else if (isHolding && !isDragging && product && !moveModeEnabled) {
       const dx = touch.clientX - touchStart.x;
       const dy = touch.clientY - touchStart.y;
       const dist = Math.sqrt(dx * dx + dy * dy);
