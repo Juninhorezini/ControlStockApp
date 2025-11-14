@@ -1,25 +1,31 @@
-## Objetivo
-- Com “Mover” ON, substituir o drag contínuo por seleção: press-and-hold na origem → navegar livremente → press-and-hold no destino vazio para concluir a movimentação.
+## Problema
+- Com “Mover” ON, a seleção não está ocorrendo de forma confiável via press‑and‑hold.
 
-## Mudanças no Código
-- Mobile
-  - `handleMobileTouchStart`: sempre registra `touchStart`. Com “Mover” ON:
-    - Se tocar e segurar uma célula com produto e não houver origem selecionada, define `moveSourcePosition` ao concluir o hold.
-    - Se tocar e segurar uma célula vazia e já houver origem, prepara confirmação de destino.
-  - `handleMobileTouchMove`: com “Mover” ON, não inicia drag nem bloqueia scroll; mantém a navegação.
-  - `handleMobileTouchEnd`: com “Mover” ON:
-    - Se foi hold em célula com produto e não havia origem, confirma a seleção de origem.
-    - Se foi hold em célula vazia e já há origem, chama `moveProductFromSource` para mover e sincronizar.
-- Nova função
-  - `moveProductFromSource(targetRow, targetCol)`: usa `moveSourcePosition` para mover o produto, atualiza estado, salva no Firebase (destino e remoção da origem) e sincroniza Sheets, reusando lógica de `moveProduct`.
-- UI
-  - Destacar a origem selecionada na grid.
-  - Desativar modal de movimentação por long‑press quando “Mover” estiver ON.
-  - Manter duplo toque para editar quando “Mover” estiver OFF.
+## Ajustes Propostos
+- Origem imediata:
+  - Com “Mover” ON, ao tocar uma célula com produto, selecionar origem imediatamente (sem aguardar 500ms) e destacar visualmente.
+  - Manter um hold curto (250ms) apenas se preferir evitar toques acidentais, mas priorizar a seleção imediata.
+- Destino simples:
+  - Com origem definida, ao soltar (touchend) sobre uma célula vazia, mover imediatamente para o destino atual.
+  - Alternativa: permitir hold curto de 250ms como confirmação, se desejar.
+- UI/Feedback:
+  - Destacar origem selecionada na grid (ring/estilo).
+  - Mensagem breve de “Origem selecionada — toque na célula vazia para mover”.
+- Comportamento do modo:
+  - “Mover” OFF: mantém duplo toque para edição; não seleciona origem.
+  - “Mover” ON: desativa modal de movimentação por long‑press e habilita esse novo fluxo.
+
+## Implementação Técnica
+- `handleMobileTouchStart`: com “Mover” ON, se `product`, definir `moveSourcePosition` imediatamente e destacar.
+- `handleMobileTouchEnd`: com “Mover” ON e origem definida, se a célula destino está vazia, executar `executeMoveProduct()` usando prateleira atual e posição tocada.
+- Remover dependências de `isHolding` para seleção/movimento nesse fluxo.
+- Garantir condição de destaque na renderização quando `moveSourcePosition` coincide com célula atual.
 
 ## Testes
-- Selecionar origem por hold; rolar/alterar prateleira; selecionar destino vazio por hold; produto move e sincroniza.
-- Com “Mover” OFF, duplo toque abre edição e não há seleção.
+- Origem → navegar → destino vazio (toque) move produto e sincroniza.
+- “Mover” OFF: duplo toque abre edição; nenhum movimento por seleção.
 
-## Riscos
-- Overlap com lógicas anteriores de drag/modal. Mitigação: gating estrito por `moveModeEnabled` e limpeza de estados no `resetDragStates`.
+## Risco
+- Seleção imediata pode pegar toques acidentais; mitigável com janela de cancelamento tocando na origem novamente para desfazer.
+
+Deseja que eu aplique esses ajustes agora?

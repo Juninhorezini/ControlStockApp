@@ -2423,16 +2423,7 @@ const saveProduct = async () => {
     setTouchStart({ x: touch.clientX, y: touch.clientY, time: now });
     if (moveModeEnabled) {
       if (product && !moveSourcePosition) {
-        const timeout = setTimeout(() => {
-          setIsHolding(true);
-          setMoveSourcePosition({ row, col, shelfId: currentShelf.id, shelfName: currentShelf.name, product });
-        }, 500);
-        setHoldTimeout(timeout);
-      } else if (!product && moveSourcePosition) {
-        const timeout = setTimeout(() => {
-          setIsHolding(true);
-        }, 500);
-        setHoldTimeout(timeout);
+        setMoveSourcePosition({ row, col, shelfId: currentShelf.id, shelfName: currentShelf.name, product });
       }
     } else {
       if (product) {
@@ -2644,12 +2635,11 @@ const saveProduct = async () => {
     // LÓGICA BASEADA NOS CRITÉRIOS:
 
     if (moveModeEnabled) {
-      if (isHolding && moveSourcePosition && !product) {
+      if (moveSourcePosition && !product) {
         const shelfId = currentShelf.id;
         setMoveTargetShelf(String(shelfId));
         setMoveTargetPosition({ row, col, label: `L${currentShelf.rows - row}:C${col + 1}`, key: `${shelfId}-${row}-${col}` });
         executeMoveProduct();
-        resetDragStates();
         return;
       }
     }
@@ -2889,6 +2879,7 @@ const saveProduct = async () => {
               ${isDragOver ? 'border-green-400 bg-green-50 scale-105 ring-2 ring-green-300' : ''}
               ${canDrop && !isMobile ? 'border-blue-300 bg-blue-50' : ''}
               ${isMobileDragSource ? 'opacity-50 scale-110 ring-2 ring-blue-400' : ''}
+              ${moveModeEnabled && moveSourcePosition && moveSourcePosition.shelfId === currentShelf.id && moveSourcePosition.row === row && moveSourcePosition.col === col ? 'ring-2 ring-orange-500' : ''}
               ${isDragging && !product && !isMobileDragSource ? 'border-blue-300 bg-blue-50' : ''}
               ${isHolding && !isDragging && draggedPosition && draggedPosition.row === row && draggedPosition.col === col ? 'ring-2 ring-orange-400 bg-orange-50' : ''}
             `}
