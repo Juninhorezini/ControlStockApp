@@ -2553,7 +2553,7 @@ const saveProduct = async () => {
   }, [isDragging, currentShelf?.id]);
 
   const handleMobileTouchMove = (e, row, col) => {
-    if (!isMobile || !draggedProduct) return;
+    if (!isMobile) return;
     
     const touch = e.touches[0];
     const deltaX = touch.clientX - touchStart.x;
@@ -2565,6 +2565,14 @@ const saveProduct = async () => {
     // LÓGICA BASEADA NOS CRITÉRIOS:
 
     if (moveModeEnabled) {
+      if (destHoldTimeout) {
+        if (distance > 8 || velocity > 1.0) {
+          clearTimeout(destHoldTimeout);
+          setDestHoldTimeout(null);
+          setIsDestHolding(false);
+          setDestinationCandidate(null);
+        }
+      }
       return;
     }
     
@@ -2634,14 +2642,20 @@ const saveProduct = async () => {
     
     // LÓGICA BASEADA NOS CRITÉRIOS:
 
-    if (moveModeEnabled) {
-      if (moveSourcePosition && !product) {
+  if (moveModeEnabled) {
+      if (isDestHolding && destinationCandidate && destinationCandidate.shelfId === currentShelf.id && destinationCandidate.row === row && destinationCandidate.col === col && !product) {
         const shelfId = currentShelf.id;
         setMoveTargetShelf(String(shelfId));
         setMoveTargetPosition({ row, col, label: `L${currentShelf.rows - row}:C${col + 1}`, key: `${shelfId}-${row}-${col}` });
         executeMoveProduct();
-        return;
       }
+      if (destHoldTimeout) {
+        clearTimeout(destHoldTimeout);
+        setDestHoldTimeout(null);
+      }
+      setIsDestHolding(false);
+      setDestinationCandidate(null);
+      return;
     }
     
     // 1. Se estava arrastando = executar drop
