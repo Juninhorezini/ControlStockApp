@@ -2567,12 +2567,12 @@ const saveProduct = async () => {
       }
       return;
     }
-    if (!isHolding && velocity > 1.0 && distance > 20) {
+    if (!isHolding && velocity > 1.0 && distance > 5) {
       return;
     }
     
     // 2. Se está segurando e começou a arrastar = ativar drag
-    if (isHolding && distance > 20 && !isDragging) {
+    if (isHolding && distance > 5 && !isDragging) {
       setIsDragging(true);
       e.preventDefault();
       e.stopPropagation();
