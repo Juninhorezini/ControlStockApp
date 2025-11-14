@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Search, Plus, Edit, Trash2, Package, MapPin, Grid, Save, X, Minus, Shield, Settings, Lock, User, ChevronDown } from 'lucide-react';
 import { database, ref, onValue, set, update, push, remove , get, onChildAdded, onChildChanged, onChildRemoved} from './firebaseConfig';
 
@@ -70,6 +70,7 @@ const StockControlApp = () => {
   const [showEditProduct, setShowEditProduct] = useState(false);
   const [moveModeEnabled, setMoveModeEnabled] = useState(false);
   const [dragStartAllowedKey, setDragStartAllowedKey] = useState(null);
+  const scrollLockYRef = useRef(0);
   const [editingProduct, setEditingProduct] = useState(null);
   const [editingPosition, setEditingPosition] = useState(null);
   const [newShelfName, setNewShelfName] = useState('');
@@ -2488,6 +2489,27 @@ const saveProduct = async () => {
     }
   };
 
+  useEffect(() => {
+    const onTouchMove = (e) => {
+      if (isDragging) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    };
+    const onWheel = (e) => {
+      if (isDragging) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    };
+    document.addEventListener('touchmove', onTouchMove, { passive: false });
+    document.addEventListener('wheel', onWheel, { passive: false });
+    return () => {
+      document.removeEventListener('touchmove', onTouchMove);
+      document.removeEventListener('wheel', onWheel);
+    };
+  }, [isDragging]);
+
   const handleMobileTouchMove = (e, row, col) => {
     if (!isMobile || !draggedProduct) return;
     
@@ -2528,7 +2550,6 @@ const saveProduct = async () => {
       } else {
         document.body.style.touchAction = 'none';
       }
-      document.body.style.overflow = 'hidden';
       document.body.style.overscrollBehavior = 'contain';
       document.documentElement.style.overscrollBehavior = 'contain';
       document.body.style.userSelect = 'none';
