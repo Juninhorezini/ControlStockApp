@@ -2425,8 +2425,26 @@ const saveProduct = async () => {
     setIsHolding(false);
     setTouchStart({ x: touch.clientX, y: touch.clientY, time: now });
     if (moveModeEnabled) {
+      // Limpar qualquer agendamento anterior de destino
+      if (destHoldTimeout) {
+        clearTimeout(destHoldTimeout);
+        setDestHoldTimeout(null);
+      }
+      setIsDestHolding(false);
+      setDestinationCandidate(null);
+
+      // Seleção de origem (produto) com toque simples
       if (product && !moveSourcePosition) {
         setMoveSourcePosition({ row, col, shelfId: currentShelf.id, shelfName: currentShelf.name, product });
+      }
+
+      // Pressão longa para selecionar célula de destino (apenas célula vazia)
+      if (!product && currentShelf && currentShelf.id) {
+        const timeout = setTimeout(() => {
+          setIsDestHolding(true);
+          setDestinationCandidate({ row, col, shelfId: currentShelf.id });
+        }, 700);
+        setDestHoldTimeout(timeout);
       }
     } else {
       if (product) {
