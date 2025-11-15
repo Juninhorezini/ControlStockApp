@@ -2666,9 +2666,30 @@ const saveProduct = async () => {
   if (moveModeEnabled) {
       if (isDestHolding && destinationCandidate && destinationCandidate.shelfId === currentShelf.id && destinationCandidate.row === row && destinationCandidate.col === col && !product) {
         const shelfId = currentShelf.id;
-        setMoveTargetShelf(String(shelfId));
-        setMoveTargetPosition({ row, col, label: `L${currentShelf.rows - row}:C${col + 1}`, key: `${shelfId}-${row}-${col}` });
-        setTimeout(() => { executeMoveProduct(); }, 0);
+        if (moveSourcePosition) {
+          (async () => {
+            const sourceKey = `${moveSourcePosition.shelfId}-${moveSourcePosition.row}-${moveSourcePosition.col}`;
+            const targetKey = `${shelfId}-${row}-${col}`;
+            if (sourceKey === targetKey) return;
+            if (products[targetKey]) { if (navigator.vibrate) navigator.vibrate([100, 50, 100]); return; }
+            const newProducts = { ...products };
+            newProducts[targetKey] = moveSourcePosition.product;
+            delete newProducts[sourceKey];
+            setProducts(newProducts);
+            try {
+              await saveProductToFirebase(parseInt(shelfId), row, col, moveSourcePosition.product);
+              await saveProductToFirebase(moveSourcePosition.shelfId, moveSourcePosition.row, moveSourcePosition.col, {});
+            } catch (err) {
+              const reverted = { ...products };
+              reverted[sourceKey] = moveSourcePosition.product;
+              delete reverted[targetKey];
+              setProducts(reverted);
+            }
+            setMoveSourcePosition(null);
+            setMoveTargetShelf('');
+            setMoveTargetPosition(null);
+          })();
+        }
       }
       if (destHoldTimeout) {
         clearTimeout(destHoldTimeout);
