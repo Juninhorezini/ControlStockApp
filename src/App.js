@@ -1371,7 +1371,7 @@ const fetchLocationsFromFirebase = async (sku, color) => {
                 const backendSnapshot = await fetchLocationsFromFirebase(locSku, locColor);
                 const lastUpdaterId = backendSnapshot?.lastUpdatedBy;
                 const lastUpdaterName = lastUpdaterId ? (userNames?.[lastUpdaterId] || lastUpdaterId) : null;
-                syncSingleProductWithSheets(locSku, locColor, backendSnapshot, lastUpdaterName);
+                enqueueSheetSync(locSku, locColor, backendSnapshot, lastUpdaterName);
               })();
             }
           } catch (err) {
@@ -1411,7 +1411,7 @@ const fetchLocationsFromFirebase = async (sku, color) => {
                 const backendSnapshot = await fetchLocationsFromFirebase(locSku, locColor);
                 const lastUpdaterId = backendSnapshot?.lastUpdatedBy;
                 const lastUpdaterName = lastUpdaterId ? (userNames?.[lastUpdaterId] || lastUpdaterId) : null;
-                syncSingleProductWithSheets(locSku, locColor, backendSnapshot, lastUpdaterName);
+                enqueueSheetSync(locSku, locColor, backendSnapshot, lastUpdaterName);
               })();
             }
           } catch (err) {
@@ -2132,7 +2132,7 @@ const saveProduct = async () => {
         oldProduct.colors.forEach(color => {
         // Passar snapshot newProducts para evitar ler estado global desatualizado
         // Como essa ação foi iniciada localmente, passar o nome do usuário atual para atribuição correta
-        syncSingleProductWithSheets(oldProduct.sku, color.code, newProducts, user?.name || null);
+        enqueueSheetSync(oldProduct.sku, color.code, newProducts, user?.name || null);
       });
     }
   } else {
@@ -2353,7 +2353,7 @@ const saveProduct = async () => {
             const backendSnapshot = await fetchLocationsFromFirebase(draggedProduct.sku, color.code);
             const lastUpdaterId = backendSnapshot?.lastUpdatedBy;
             const lastUpdaterName = lastUpdaterId ? await resolveUserDisplayName(lastUpdaterId) : null;
-            await syncSingleProductWithSheets(draggedProduct.sku, color.code, backendSnapshot, lastUpdaterName);
+            await enqueueSheetSync(draggedProduct.sku, color.code, backendSnapshot, lastUpdaterName);
           } catch (syncErr) {
             console.warn('⚠️ Erro ao sincronizar Sheets após mover produto:', syncErr);
           }
@@ -2622,7 +2622,7 @@ const saveProduct = async () => {
                     const backendSnapshot = await fetchLocationsFromFirebase(moveSourcePosition.product.sku, color.code);
                     const lastUpdaterId = backendSnapshot?.lastUpdatedBy;
                     const lastUpdaterName = lastUpdaterId ? await resolveUserDisplayName(lastUpdaterId) : null;
-                    await syncSingleProductWithSheets(moveSourcePosition.product.sku, color.code, backendSnapshot, lastUpdaterName);
+                    await enqueueSheetSync(moveSourcePosition.product.sku, color.code, backendSnapshot, lastUpdaterName);
                   } catch (syncErr) {}
                 }
               }
@@ -2763,7 +2763,7 @@ const saveProduct = async () => {
             const backendSnapshot = await fetchLocationsFromFirebase(moveSourcePosition.product.sku, color.code);
             const lastUpdaterId = backendSnapshot?.lastUpdatedBy;
             const lastUpdaterName = lastUpdaterId ? await resolveUserDisplayName(lastUpdaterId) : null;
-            await syncSingleProductWithSheets(moveSourcePosition.product.sku, color.code, backendSnapshot, lastUpdaterName);
+            await enqueueSheetSync(moveSourcePosition.product.sku, color.code, backendSnapshot, lastUpdaterName);
           } catch (syncErr) {
             console.warn('⚠️ Erro ao sincronizar Sheets após move via modal:', syncErr);
           }
@@ -4857,3 +4857,17 @@ const saveProduct = async () => {
 };
 
 export default StockControlApp;
+  const lastSheetSyncRef = useRef({});
+
+  const enqueueSheetSync = async (sku, color, snapshot, lastUpdaterName) => {
+    try {
+      const key = `${String(sku).trim()}-${String(color).trim()}`;
+      const now = Date.now();
+      const prev = lastSheetSyncRef.current[key] || 0;
+      if (now - prev < 1200) {
+        return;
+      }
+      lastSheetSyncRef.current[key] = now;
+      await syncSingleProductWithSheets(sku, color, snapshot, lastUpdaterName);
+    } catch (e) {}
+  };
