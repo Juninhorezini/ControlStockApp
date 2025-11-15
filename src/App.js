@@ -1381,8 +1381,9 @@ const fetchLocationsFromFirebase = async (sku, color) => {
             const locColor = loc.color;
             const updatedByRaw = loc.metadata?.updated_by;
             const updatedBy = (typeof updatedByRaw === 'string') ? updatedByRaw : (updatedByRaw?.displayName || (updatedByRaw?.uid ? userNames?.[updatedByRaw.uid] : null));
-            if (!updatedBy || updatedBy !== user.name) {
+            if (updatedBy && updatedBy === user.name) {
               (async () => {
+                await new Promise(resolve => setTimeout(resolve, 1200));
                 const backendSnapshot = await fetchLocationsFromFirebase(locSku, locColor);
                 const lastUpdaterId = backendSnapshot?.lastUpdatedBy;
                 const lastUpdaterName = lastUpdaterId ? (userNames?.[lastUpdaterId] || lastUpdaterId) : null;
@@ -1421,8 +1422,9 @@ const fetchLocationsFromFirebase = async (sku, color) => {
             const locColor = loc.color;
             const updatedByRaw = loc.metadata?.updated_by;
             const updatedBy = (typeof updatedByRaw === 'string') ? updatedByRaw : (updatedByRaw?.displayName || (updatedByRaw?.uid ? userNames?.[updatedByRaw.uid] : null));
-            if (!updatedBy || updatedBy !== user.name) {
+            if (updatedBy && updatedBy === user.name) {
               (async () => {
+                await new Promise(resolve => setTimeout(resolve, 1200));
                 const backendSnapshot = await fetchLocationsFromFirebase(locSku, locColor);
                 const lastUpdaterId = backendSnapshot?.lastUpdatedBy;
                 const lastUpdaterName = lastUpdaterId ? (userNames?.[lastUpdaterId] || lastUpdaterId) : null;
@@ -2144,11 +2146,7 @@ const saveProduct = async () => {
     // 🆕 Sync APÓS Firebase confirmar (usar snapshot local para garantir dado atual)
     if (sheetsUrl && oldProduct && oldProduct.colors) {
       await new Promise(resolve => setTimeout(resolve, 1000));  // Aguardar listeners
-        oldProduct.colors.forEach(color => {
-        // Passar snapshot newProducts para evitar ler estado global desatualizado
-        // Como essa ação foi iniciada localmente, passar o nome do usuário atual para atribuição correta
-        enqueueSheetSync(oldProduct.sku, color.code, newProducts, user?.name || null);
-      });
+        
     }
   } else {
     const validColors = editingProduct.colors.filter(color => color.code && color.code.trim() !== '');
@@ -2181,12 +2179,7 @@ const saveProduct = async () => {
       if (sheetsUrl) {
         await new Promise(resolve => setTimeout(resolve, 1000));  // Aguardar Firebase listeners
         // Para garantir consistência do backend, buscar as locations atuais do Firebase antes de sincronizar
-        for (const color of validColors) {
-          const backendSnapshot = await fetchLocationsFromFirebase(updatedProduct.sku, color.code);
-          const lastUpdaterId = backendSnapshot?.lastUpdatedBy;
-          const lastUpdaterName = lastUpdaterId ? await resolveUserDisplayName(lastUpdaterId) : null;
-          syncSingleProductWithSheets(updatedProduct.sku, color.code, backendSnapshot, lastUpdaterName);
-        }
+        
       }
       
       // Sincronizar cores removidas
@@ -2196,10 +2189,7 @@ const saveProduct = async () => {
           const stillExists = validColors.some(newColor => newColor.code === oldColor.code);
           if (!stillExists) {
             // Se a cor foi removida localmente, confirmar no backend e enviar resultado
-            const backendSnapshot = await fetchLocationsFromFirebase(oldProduct.sku, oldColor.code);
-            const lastUpdaterId = backendSnapshot?.lastUpdatedBy;
-            const lastUpdaterName = lastUpdaterId ? await resolveUserDisplayName(lastUpdaterId) : null;
-            syncSingleProductWithSheets(oldProduct.sku, oldColor.code, backendSnapshot, lastUpdaterName);
+            
           }
         }
       }
@@ -2361,19 +2351,7 @@ const saveProduct = async () => {
       // Opcional: dar feedback tátil
       if (navigator.vibrate) navigator.vibrate(100);
 
-      // Atualizar planilha (Sheets) para cada cor deste SKU usando snapshot do backend
-      if (typeof fetchLocationsFromFirebase === 'function' && typeof syncSingleProductWithSheets === 'function') {
-        for (const color of (draggedProduct.colors || [])) {
-          try {
-            const backendSnapshot = await fetchLocationsFromFirebase(draggedProduct.sku, color.code);
-            const lastUpdaterId = backendSnapshot?.lastUpdatedBy;
-            const lastUpdaterName = lastUpdaterId ? await resolveUserDisplayName(lastUpdaterId) : null;
-            await enqueueSheetSync(draggedProduct.sku, color.code, backendSnapshot, lastUpdaterName);
-          } catch (syncErr) {
-            console.warn('⚠️ Erro ao sincronizar Sheets após mover produto:', syncErr);
-          }
-        }
-      }
+      // Sync de planilha acontece via listeners (evita duplicatas entre dispositivos)
     } catch (err) {
       console.error('❌ Erro ao mover produto (Firebase):', err);
       // Em caso de erro backend, podemos reverter o estado local para manter consistência
@@ -2631,16 +2609,7 @@ const saveProduct = async () => {
               await saveProductToFirebase(parseInt(shelfId), row, col, moveSourcePosition.product);
               await saveProductToFirebase(moveSourcePosition.shelfId, moveSourcePosition.row, moveSourcePosition.col, {});
 
-              if (typeof fetchLocationsFromFirebase === 'function' && typeof syncSingleProductWithSheets === 'function') {
-                for (const color of (moveSourcePosition.product.colors || [])) {
-                  try {
-                    const backendSnapshot = await fetchLocationsFromFirebase(moveSourcePosition.product.sku, color.code);
-                    const lastUpdaterId = backendSnapshot?.lastUpdatedBy;
-                    const lastUpdaterName = lastUpdaterId ? await resolveUserDisplayName(lastUpdaterId) : null;
-                    await enqueueSheetSync(moveSourcePosition.product.sku, color.code, backendSnapshot, lastUpdaterName);
-                  } catch (syncErr) {}
-                }
-              }
+              // Sync via listeners
             } catch (err) {
               const reverted = { ...products };
               reverted[sourceKey] = moveSourcePosition.product;
@@ -2771,19 +2740,7 @@ const saveProduct = async () => {
       // Remover locations antigas na posição de origem (chamada com objeto vazio remove)
       await saveProductToFirebase(moveSourcePosition.shelfId, moveSourcePosition.row, moveSourcePosition.col, {});
 
-      // Sincronizar Sheets por cor usando snapshot do backend
-      if (typeof fetchLocationsFromFirebase === 'function' && typeof syncSingleProductWithSheets === 'function') {
-        for (const color of (moveSourcePosition.product.colors || [])) {
-          try {
-            const backendSnapshot = await fetchLocationsFromFirebase(moveSourcePosition.product.sku, color.code);
-            const lastUpdaterId = backendSnapshot?.lastUpdatedBy;
-            const lastUpdaterName = lastUpdaterId ? await resolveUserDisplayName(lastUpdaterId) : null;
-            await enqueueSheetSync(moveSourcePosition.product.sku, color.code, backendSnapshot, lastUpdaterName);
-          } catch (syncErr) {
-            console.warn('⚠️ Erro ao sincronizar Sheets após move via modal:', syncErr);
-          }
-        }
-      }
+      
     } catch (err) {
       console.error('❌ Erro ao executar move via modal (Firebase):', err);
       // Reverter estado local se houve falha no backend
@@ -3007,7 +2964,7 @@ const saveProduct = async () => {
                 <span className="hidden sm:inline">Google Sheets</span>
               </button>
 
-              {/* Botão Mover removido do topo (desktop e mobile) */}
+              
 
               {/* Botão de Backup */}
               <button
