@@ -2679,6 +2679,17 @@ const saveProduct = async () => {
             try {
               await saveProductToFirebase(parseInt(shelfId), row, col, moveSourcePosition.product);
               await saveProductToFirebase(moveSourcePosition.shelfId, moveSourcePosition.row, moveSourcePosition.col, {});
+
+              if (typeof fetchLocationsFromFirebase === 'function' && typeof syncSingleProductWithSheets === 'function') {
+                for (const color of (moveSourcePosition.product.colors || [])) {
+                  try {
+                    const backendSnapshot = await fetchLocationsFromFirebase(moveSourcePosition.product.sku, color.code);
+                    const lastUpdaterId = backendSnapshot?.lastUpdatedBy;
+                    const lastUpdaterName = lastUpdaterId ? await resolveUserDisplayName(lastUpdaterId) : null;
+                    await syncSingleProductWithSheets(moveSourcePosition.product.sku, color.code, backendSnapshot, lastUpdaterName);
+                  } catch (syncErr) {}
+                }
+              }
             } catch (err) {
               const reverted = { ...products };
               reverted[sourceKey] = moveSourcePosition.product;
