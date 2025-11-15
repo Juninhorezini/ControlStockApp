@@ -2277,20 +2277,12 @@ const saveProduct = async () => {
   // Drag & Drop Desktop
   const handleDragStart = (e, row, col, product) => {
     if (!product || !currentShelf) return;
-    if (!moveModeEnabled) { e.preventDefault(); return; }
-    const target = e.target;
-    if (!target || target.dataset.handle !== 'move') { e.preventDefault(); return; }
-    
     const position = { row, col, shelfId: currentShelf.id };
     setDraggedProduct(product);
     setDraggedPosition(position);
-    
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', '');
-    
-    setTimeout(() => {
-      e.target.style.opacity = '0.5';
-    }, 0);
+    setTimeout(() => { e.target.style.opacity = '0.5'; }, 0);
   };
 
   const handleDragEnd = (e) => {
@@ -2836,7 +2828,7 @@ const saveProduct = async () => {
           <div
             key={key}
             data-position={key}
-            draggable={!isMobile && !!product && moveModeEnabled && dragStartAllowedKey === key}
+            draggable={!isMobile && !!product}
             onClick={isMobile ? undefined : () => openEditProduct(row, col)}
             onTouchStart={isMobile ? (e) => handleMobileTouchStart(e, row, col, product) : undefined}
             onTouchMove={isMobile ? (e) => handleMobileTouchMove(e, row, col) : undefined}
@@ -2877,7 +2869,7 @@ const saveProduct = async () => {
               WebkitUserSelect: 'none',
               WebkitTouchCallout: 'none'
             }}
-            title={product ? `${moveModeEnabled ? (isMobile ? 'Use o handle para mover' : 'Arraste pelo handle') : 'Ative Modo Mover para arrastar'}` : 'Toque para adicionar produto'}
+            title={product ? `${isMobile ? (moveModeEnabled ? 'Modo Mover ativo' : 'Ative Modo Mover') : 'Clique e arraste para mover'}` : 'Toque para adicionar produto'}
           >
             {product && typeof product === 'object' && product.sku ? (
               <>
@@ -3000,14 +2992,7 @@ const saveProduct = async () => {
                 <span className="hidden sm:inline">Google Sheets</span>
               </button>
 
-              <button
-                onClick={() => setMoveModeEnabled(v => !v)}
-                className={`flex items-center gap-2 px-3 py-2 text-sm rounded-lg transition-colors min-h-[44px] ${moveModeEnabled ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-blue-100 text-blue-700 hover:bg-blue-200'}`}
-                title={moveModeEnabled ? 'Modo Mover: ativo' : 'Modo Mover: desativado'}
-              >
-                <Shield className="w-4 h-4" />
-                <span className="hidden sm:inline">{moveModeEnabled ? 'Mover: ON' : 'Mover: OFF'}</span>
-              </button>
+              {/* Botão Mover removido do topo (desktop e mobile) */}
 
               {/* Botão de Backup */}
               <button
