@@ -109,6 +109,8 @@ const StockControlApp = () => {
   const [isDragging, setIsDragging] = useState(false);
   const [isHolding, setIsHolding] = useState(false);
   const [holdTimeout, setHoldTimeout] = useState(null);
+  const [isSourceHolding, setIsSourceHolding] = useState(false);
+  const [sourceHoldTimeout, setSourceHoldTimeout] = useState(null);
   
   // Estados para duplo clique mobile
   const [lastTapTime, setLastTapTime] = useState(0);
@@ -2425,35 +2427,29 @@ const saveProduct = async () => {
     setIsHolding(false);
     setTouchStart({ x: touch.clientX, y: touch.clientY, time: now });
     if (moveModeEnabled) {
-      // Limpar qualquer agendamento anterior de destino
-      if (destHoldTimeout) {
-        clearTimeout(destHoldTimeout);
-        setDestHoldTimeout(null);
-      }
+      if (destHoldTimeout) { clearTimeout(destHoldTimeout); setDestHoldTimeout(null); }
+      if (sourceHoldTimeout) { clearTimeout(sourceHoldTimeout); setSourceHoldTimeout(null); }
       setIsDestHolding(false);
       setDestinationCandidate(null);
+      setIsSourceHolding(false);
 
-      // Seleção de origem (produto) com toque simples
-      if (product && !moveSourcePosition) {
-        setMoveSourcePosition({ row, col, shelfId: currentShelf.id, shelfName: currentShelf.name, product });
+      if (product && !moveSourcePosition && currentShelf && currentShelf.id) {
+        const t = setTimeout(() => {
+          setIsSourceHolding(true);
+          setMoveSourcePosition({ row, col, shelfId: currentShelf.id, shelfName: currentShelf.name, product });
+        }, 700);
+        setSourceHoldTimeout(t);
       }
 
-      // Pressão longa para selecionar célula de destino (apenas célula vazia)
       if (!product && currentShelf && currentShelf.id) {
-        const timeout = setTimeout(() => {
+        const t = setTimeout(() => {
           setIsDestHolding(true);
           setDestinationCandidate({ row, col, shelfId: currentShelf.id });
         }, 700);
-        setDestHoldTimeout(timeout);
+        setDestHoldTimeout(t);
       }
     } else {
-      if (product) {
-        const position = { row, col, shelfId: currentShelf.id };
-        setDraggedProduct(product);
-        setDraggedPosition(position);
-        const timeout = setTimeout(() => { setIsHolding(true); }, 650);
-        setHoldTimeout(timeout);
-      }
+      return;
     }
   };
 
@@ -2586,72 +2582,20 @@ const saveProduct = async () => {
     // LÓGICA BASEADA NOS CRITÉRIOS:
 
     if (moveModeEnabled) {
-      if (destHoldTimeout) {
-        if (distance > 8 || velocity > 1.0) {
-          clearTimeout(destHoldTimeout);
-          setDestHoldTimeout(null);
-          setIsDestHolding(false);
-          setDestinationCandidate(null);
-        }
+      if ((destHoldTimeout && (distance > 8 || velocity > 1.0))) {
+        clearTimeout(destHoldTimeout);
+        setDestHoldTimeout(null);
+        setIsDestHolding(false);
+        setDestinationCandidate(null);
+      }
+      if (sourceHoldTimeout && (distance > 8 || velocity > 1.0)) {
+        clearTimeout(sourceHoldTimeout);
+        setSourceHoldTimeout(null);
+        setIsSourceHolding(false);
       }
       return;
     }
-    
-    // 1. Se movimento rápido e não está segurando = scroll nativo
-    if (!isHolding && distance > 8) {
-      if (holdTimeout) {
-        clearTimeout(holdTimeout);
-        setHoldTimeout(null);
-      }
-      return;
-    }
-    if (!isHolding && velocity > 1.0 && distance > 5) {
-      return;
-    }
-    
-    // 2. Se está segurando e começou a arrastar = ativar drag
-    if (isHolding && distance > 5 && !isDragging) {
-      setIsDragging(true);
-      e.preventDefault();
-      e.stopPropagation();
-      const container = document.querySelector('.overflow-x-auto');
-      if (container) {
-        container.style.touchAction = 'none';
-        container.style.overscrollBehavior = 'contain';
-      } else {
-        document.body.style.touchAction = 'none';
-      }
-      document.body.style.overscrollBehavior = 'contain';
-      document.documentElement.style.overscrollBehavior = 'contain';
-      document.body.style.userSelect = 'none';
-    }
-    
-    // 3. Se está arrastando = controlar movimento
-    if (isDragging) {
-      e.preventDefault();
-      e.stopPropagation();
-      
-      checkAutoScroll(touch.clientX);
-      checkVerticalAutoScroll(touch.clientY);
-      
-      // Detectar posição alvo
-      const element = document.elementFromPoint(touch.clientX, touch.clientY);
-      if (element && element.dataset.position) {
-        const [shelfId, targetRow, targetCol] = element.dataset.position.split('-');
-        if (parseInt(shelfId) === currentShelf.id) {
-          const targetProduct = products[element.dataset.position];
-          const isSource = draggedPosition.row === parseInt(targetRow) && draggedPosition.col === parseInt(targetCol);
-          
-          if (!targetProduct && !isSource) {
-            setDragOverPosition({ row: parseInt(targetRow), col: parseInt(targetCol) });
-          } else {
-            setDragOverPosition(null);
-          }
-        }
-      } else {
-        setDragOverPosition(null);
-      }
-    }
+    return;
   };
 
   const handleMobileTouchEnd = (e, row, col, product) => {
@@ -2702,38 +2646,15 @@ const saveProduct = async () => {
           })();
         }
       }
-      if (destHoldTimeout) {
-        clearTimeout(destHoldTimeout);
-        setDestHoldTimeout(null);
-      }
+      if (destHoldTimeout) { clearTimeout(destHoldTimeout); setDestHoldTimeout(null); }
+      if (sourceHoldTimeout) { clearTimeout(sourceHoldTimeout); setSourceHoldTimeout(null); }
       setIsDestHolding(false);
+      setIsSourceHolding(false);
       setDestinationCandidate(null);
       return;
     }
     
-    // 1. Se estava arrastando = executar drop
-    if (isDragging && draggedProduct) {
-      e.preventDefault();
-      e.stopPropagation();
-      
-      const element = document.elementFromPoint(touch.clientX, touch.clientY);
-      if (element && element.dataset.position) {
-        const [shelfId, targetRow, targetCol] = element.dataset.position.split('-');
-        if (parseInt(shelfId) === currentShelf.id) {
-          moveProduct(parseInt(targetRow), parseInt(targetCol));
-        }
-      }
-    }
     
-    // 2. Se estava segurando mas não arrastou = modal movimento (apenas sem deslocamento)
-    else if (isHolding && !isDragging && product && !moveModeEnabled) {
-      const dx = touch.clientX - touchStart.x;
-      const dy = touch.clientY - touchStart.y;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-      if (dist < 6) {
-        openMoveModal(row, col, product);
-      }
-    }
     
     // 3. Se foi toque rápido = duplo clique para editar
     else if (duration < 300 && !isHolding && !isDragging) {
@@ -3308,7 +3229,18 @@ const saveProduct = async () => {
         {currentShelf ? (
           <div className="bg-white rounded-lg shadow-sm p-3 md:p-6">
             <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-4 md:mb-6">
-              <Grid className="w-5 h-5 md:w-6 md:h-6 text-blue-600" />
+              <div className="flex items-center gap-2">
+                <Grid className="w-5 h-5 md:w-6 md:h-6 text-blue-600" />
+                {isMobile && (
+                  <button
+                    onClick={() => setMoveModeEnabled(v => !v)}
+                    className={`px-2 py-1 text-xs rounded ${moveModeEnabled ? 'bg-blue-600 text-white' : 'bg-blue-100 text-blue-700'} border ${moveModeEnabled ? 'border-blue-700' : 'border-blue-300'}`}
+                    title={moveModeEnabled ? 'Modo Mover: ativo' : 'Modo Mover: desativado'}
+                  >
+                    Mover
+                  </button>
+                )}
+              </div>
               <div className="flex-1">
                 <h2 className="text-base md:text-lg font-semibold">{currentShelf.name}</h2>
                 <span className="text-sm text-gray-500">
