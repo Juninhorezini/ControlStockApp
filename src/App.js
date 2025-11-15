@@ -818,6 +818,35 @@ const fetchLocationsFromFirebase = async (sku, color) => {
   }
 };
 
+const computeTotalsFromFirebase = async () => {
+  try {
+    const locsRef = ref(database, 'locations');
+    const snapshot = await new Promise((resolve) => {
+      onValue(locsRef, resolve, { onlyOnce: true });
+    });
+    const allLocs = snapshot.val() || {};
+    const skuSet = new Set();
+    const colorSet = new Set();
+    const corridorSet = new Set();
+    let totalQuantity = 0;
+    for (const [, loc] of Object.entries(allLocs)) {
+      if (loc.sku) skuSet.add(String(loc.sku).trim());
+      if (loc.color) colorSet.add(String(loc.color).trim());
+      const corr = String((loc.shelf && (loc.shelf.corridor || loc.shelf.name && loc.shelf.name.charAt(0))) || '').trim();
+      if (corr) corridorSet.add(corr);
+      totalQuantity += Number(loc.quantity) || 0;
+    }
+    return {
+      produtosUnicos: skuSet.size,
+      quantidadeTotal: totalQuantity,
+      coresDiferentes: colorSet.size,
+      corredores: corridorSet.size
+    };
+  } catch (e) {
+    return { produtosUnicos: 0, quantidadeTotal: 0, coresDiferentes: 0, corredores: 0 };
+  }
+};
+
   // Função para debug da planilha
   const debugSpreadsheet = async () => {
     if (!sheetsUrl) {
@@ -938,7 +967,7 @@ const fetchLocationsFromFirebase = async (sku, color) => {
             corredores: uniqueCorridors.size,
             timestamp: new Date().toISOString()
           }
-        };
+        }; 
 
         await fetch(sheetsUrl, {
           method: 'POST',
@@ -968,25 +997,15 @@ const fetchLocationsFromFirebase = async (sku, color) => {
     if (now - (lastSummarySentRef.current || 0) < 30000) return;
     lastSummarySentRef.current = now;
     await new Promise(resolve => setTimeout(resolve, 1200));
-    const consolidatedProducts = consolidateProductsBySKUColor();
-    const uniqueSkus = new Set(consolidatedProducts.map(p => String(p.sku).trim()));
-    const totalQuantity = consolidatedProducts.reduce((sum, p) => sum + (Number(p.quantity) || 0), 0);
-    const uniqueColors = new Set(consolidatedProducts.map(p => String(p.color).trim()));
-    const uniqueCorridors = new Set(
-      consolidatedProducts
-        .map(p => p.localizacoes)
-        .flat()
-        .map(loc => String(loc.corredor || '').trim())
-        .filter(c => c)
-    );
+    const totals = await computeTotalsFromFirebase();
     const params = new URLSearchParams({
       callback: 'handleSyncResponse',
       action: 'summaryTotals',
       usuario: user?.name || 'App React',
-      produtosUnicos: String(uniqueSkus.size),
-      quantidadeTotal: String(totalQuantity),
-      coresDiferentes: String(uniqueColors.size),
-      corredores: String(uniqueCorridors.size),
+      produtosUnicos: String(totals.produtosUnicos),
+      quantidadeTotal: String(totals.quantidadeTotal),
+      coresDiferentes: String(totals.coresDiferentes),
+      corredores: String(totals.corredores),
       timestamp: new Date().toISOString()
     });
     await new Promise((resolve, reject) => {
