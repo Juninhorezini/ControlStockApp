@@ -2668,7 +2668,7 @@ const saveProduct = async () => {
         const shelfId = currentShelf.id;
         setMoveTargetShelf(String(shelfId));
         setMoveTargetPosition({ row, col, label: `L${currentShelf.rows - row}:C${col + 1}`, key: `${shelfId}-${row}-${col}` });
-        executeMoveProduct();
+        setTimeout(() => { executeMoveProduct(); }, 0);
       }
       if (destHoldTimeout) {
         clearTimeout(destHoldTimeout);
