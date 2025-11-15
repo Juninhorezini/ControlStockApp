@@ -33,6 +33,8 @@ function handleRequest(e) {
       prateleiraSheet.getRange(10, 1, 1, 8).setValues([['Última Modificação', 'Modificado Por', 'SKU', 'Cor', 'Quantidade', 'Corredor', 'Prateleira', 'Localização']]);
       formatHeader(prateleiraSheet, 10);
       prateleiraSheet.setFrozenRows(10);
+    } else {
+      ensureHeaderAtRow10(prateleiraSheet);
     }
     ensureTotalsBlock(prateleiraSheet);
 
@@ -54,8 +56,21 @@ function handleRequest(e) {
     }
 
     if (action === 'summaryTotals') {
-      const totals = payloadJson ? payloadJson.totals : null;
-      const usuario = payloadJson ? (payloadJson.usuario || 'Sistema') : (e.parameter.usuario || 'Sistema');
+      var totals = null;
+      var usuario = 'Sistema';
+      if (payloadJson && payloadJson.totals) {
+        totals = payloadJson.totals;
+        usuario = payloadJson.usuario || 'Sistema';
+      } else {
+        totals = {
+          produtosUnicos: parseInt(e.parameter.produtosUnicos) || 0,
+          quantidadeTotal: parseInt(e.parameter.quantidadeTotal) || 0,
+          coresDiferentes: parseInt(e.parameter.coresDiferentes) || 0,
+          corredores: parseInt(e.parameter.corredores) || 0,
+          timestamp: e.parameter.timestamp || new Date().toISOString()
+        };
+        usuario = e.parameter.usuario || 'Sistema';
+      }
       return updateSummaryTotals(prateleiraSheet, totals, usuario);
     }
 
@@ -289,4 +304,30 @@ function ensureTotalsBlock(sheet) {
     for (var i = 0; i < ranges.length; i++) { if (ranges[i].getName() === 'TOTALIZADORES') { existing = ranges[i]; break; } }
     if (existing) { existing.setRange(totalRange); } else { ss.addNamedRange('TOTALIZADORES', totalRange); }
   } catch (e) {}
+}
+function ensureHeaderAtRow10(sheet) {
+  var lastRow = sheet.getLastRow();
+  var headerRowDetect = -1;
+  var maxCheck = Math.min(lastRow, 20);
+  if (maxCheck >= 1) {
+    var checkValues = sheet.getRange(1, 1, maxCheck, sheet.getLastColumn()).getValues();
+    for (var i = 0; i < checkValues.length; i++) {
+      var row = checkValues[i];
+      if (String(row[2] || '').toUpperCase().trim() === 'SKU' && String(row[3] || '').toUpperCase().trim() === 'COR') {
+        headerRowDetect = i + 1;
+        break;
+      }
+    }
+  }
+  if (headerRowDetect > 0 && headerRowDetect !== 10) {
+    if (headerRowDetect < 10) {
+      sheet.insertRows(1, 10 - headerRowDetect);
+    }
+    sheet.setFrozenRows(10);
+    formatHeader(sheet, 10);
+  } else if (headerRowDetect < 0) {
+    sheet.getRange(10, 1, 1, 8).setValues([['Última Modificação', 'Modificado Por', 'SKU', 'Cor', 'Quantidade', 'Corredor', 'Prateleira', 'Localização']]);
+    formatHeader(sheet, 10);
+    sheet.setFrozenRows(10);
+  }
 }

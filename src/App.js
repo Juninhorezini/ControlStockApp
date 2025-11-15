@@ -979,20 +979,28 @@ const fetchLocationsFromFirebase = async (sku, color) => {
         .map(loc => String(loc.corredor || '').trim())
         .filter(c => c)
     );
-    const summaryPayload = {
+    const params = new URLSearchParams({
+      callback: 'handleSyncResponse',
       action: 'summaryTotals',
       usuario: user?.name || 'App React',
-      totals: {
-        produtosUnicos: uniqueSkus.size,
-        quantidadeTotal: totalQuantity,
-        coresDiferentes: uniqueColors.size,
-        corredores: uniqueCorridors.size,
-        timestamp: new Date().toISOString()
+      produtosUnicos: String(uniqueSkus.size),
+      quantidadeTotal: String(totalQuantity),
+      coresDiferentes: String(uniqueColors.size),
+      corredores: String(uniqueCorridors.size),
+      timestamp: new Date().toISOString()
+    });
+    await new Promise((resolve, reject) => {
+      try {
+        const script = document.createElement('script');
+        script.src = `${sheetsUrl}?${params.toString()}`;
+        script.onload = () => resolve();
+        script.onerror = () => reject(new Error('summary_jsonp_failed'));
+        document.body.appendChild(script);
+        setTimeout(() => { try { document.body.removeChild(script); } catch (err) {} }, 5000);
+      } catch (err) {
+        reject(err);
       }
-    };
-    try {
-      await fetch(sheetsUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(summaryPayload) });
-    } catch (e) {}
+    }).catch(() => {});
   };
 
   // Funções de backup e restore
@@ -1401,6 +1409,7 @@ const fetchLocationsFromFirebase = async (sku, color) => {
         setTimeout(() => {
           initialLoadComplete = true;
           console.log('✅ Carga inicial completa - onChildAdded ativo para novos itens');
+          sendSummaryTotalsDebounced();
         }, 1000);
       });
 
@@ -1459,6 +1468,7 @@ const fetchLocationsFromFirebase = async (sku, color) => {
                 sendSummaryTotalsDebounced();
               })();
             }
+            sendSummaryTotalsDebounced();
           } catch (err) {
             console.error('❌ Erro ao disparar sync após child added:', err);
           }
@@ -1501,6 +1511,7 @@ const fetchLocationsFromFirebase = async (sku, color) => {
                 sendSummaryTotalsDebounced();
               })();
             }
+            sendSummaryTotalsDebounced();
           } catch (err) {
             console.error('❌ Erro ao disparar sync após child changed:', err);
           }
@@ -1529,13 +1540,7 @@ const fetchLocationsFromFirebase = async (sku, color) => {
 
         console.log('Location removida:', snapshot.key);
         if (initialLoadComplete) {
-          try {
-            const updatedByRaw = loc.metadata?.updated_by;
-            const updatedBy = (typeof updatedByRaw === 'string') ? updatedByRaw : (updatedByRaw?.displayName || (updatedByRaw?.uid ? userNames?.[updatedByRaw.uid] : null));
-            if (updatedBy && updatedBy === user.name) {
-              sendSummaryTotalsDebounced();
-            }
-          } catch (err) {}
+          sendSummaryTotalsDebounced();
         }
       });
 
