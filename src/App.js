@@ -2145,8 +2145,17 @@ const saveProduct = async () => {
     
     // 🆕 Sync APÓS Firebase confirmar (usar snapshot local para garantir dado atual)
     if (sheetsUrl && oldProduct && oldProduct.colors) {
-      await new Promise(resolve => setTimeout(resolve, 1000));  // Aguardar listeners
-        
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      for (const color of oldProduct.colors) {
+        try {
+          const backendSnapshot = await fetchLocationsFromFirebase(oldProduct.sku, color.code);
+          const lastUpdaterId = backendSnapshot?.lastUpdatedBy;
+          const lastUpdaterName = lastUpdaterId ? await resolveUserDisplayName(lastUpdaterId) : null;
+          await enqueueSheetSync(oldProduct.sku, color.code, backendSnapshot, lastUpdaterName || (user?.name || null));
+        } catch (syncErr) {
+          console.warn('⚠️ Erro ao sincronizar Sheets após remover produto:', syncErr);
+        }
+      }
     }
   } else {
     const validColors = editingProduct.colors.filter(color => color.code && color.code.trim() !== '');
