@@ -915,6 +915,40 @@ const fetchLocationsFromFirebase = async (sku, color) => {
         }
       }
 
+      // Enviar resumo de totais para a planilha (para comparação de consistência)
+      try {
+        const uniqueSkus = new Set(consolidatedProducts.map(p => String(p.sku).trim()));
+        const totalQuantity = consolidatedProducts.reduce((sum, p) => sum + (Number(p.quantity) || 0), 0);
+        const uniqueColors = new Set(consolidatedProducts.map(p => String(p.color).trim()));
+        const uniqueCorridors = new Set(
+          consolidatedProducts
+            .map(p => p.localizacoes)
+            .flat()
+            .map(loc => String(loc.corredor || '').trim())
+            .filter(c => c)
+        );
+
+        const summaryPayload = {
+          action: 'summaryTotals',
+          usuario: user?.name || 'App React',
+          totals: {
+            produtosUnicos: uniqueSkus.size,
+            quantidadeTotal: totalQuantity,
+            coresDiferentes: uniqueColors.size,
+            corredores: uniqueCorridors.size,
+            timestamp: new Date().toISOString()
+          }
+        };
+
+        await fetch(sheetsUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(summaryPayload)
+        });
+      } catch (e) {
+        console.warn('⚠️ Falha ao enviar resumo de totais para a planilha:', e);
+      }
+
       setSyncStatus(`✅ ${successCount} produtos sincronizados ${errorCount > 0 ? `| ❌ ${errorCount} erros` : ''}`);
       
       setTimeout(() => {

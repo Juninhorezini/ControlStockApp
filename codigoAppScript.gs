@@ -26,18 +26,36 @@ function handleRequest(e) {
   try {
     const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
     let prateleiraSheet = ss.getSheetByName('Prateleiras');
-    let historicoSheet = ss.getSheetByName('HistÃ³rico');
+    let historicoSheet = ss.getSheetByName('Histórico');
 
     if (!prateleiraSheet) {
       prateleiraSheet = ss.insertSheet('Prateleiras');
-      prateleiraSheet.appendRow(['Ãšltima ModificaÃ§Ã£o', 'Modificado Por', 'SKU', 'Cor', 'Quantidade', 'Corredor', 'Prateleira', 'LocalizaÃ§Ã£o']);
-      formatHeader(prateleiraSheet);
+      prateleiraSheet.getRange(10, 1, 1, 8).setValues([['Última Modificação', 'Modificado Por', 'SKU', 'Cor', 'Quantidade', 'Corredor', 'Prateleira', 'Localização']]);
+      formatHeader(prateleiraSheet, 10);
+      prateleiraSheet.setFrozenRows(10);
     }
 
     if (!historicoSheet) {
-      historicoSheet = ss.insertSheet('HistÃ³rico');
-      historicoSheet.appendRow(['Data/Hora', 'UsuÃ¡rio', 'AÃ§Ã£o', 'SKU', 'Cor', 'Qtd Anterior', 'Qtd Nova', 'LocalizaÃ§Ã£o', 'Corredor', 'Prateleira']);
-      formatHeader(historicoSheet);
+      historicoSheet = ss.insertSheet('Histórico');
+      historicoSheet.appendRow(['Data/Hora', 'Usuário', 'Ação', 'SKU', 'Cor', 'Qtd Anterior', 'Qtd Nova', 'Localização', 'Corredor', 'Prateleira']);
+      formatHeader(historicoSheet, 1);
+    }
+
+    var action = null;
+    var payloadJson = null;
+    if (e && e.postData && e.postData.type === 'application/json' && e.postData.contents) {
+      try {
+        payloadJson = JSON.parse(e.postData.contents);
+        action = payloadJson.action || null;
+      } catch(err) {}
+    } else {
+      action = e.parameter.action || null;
+    }
+
+    if (action === 'summaryTotals') {
+      const totals = payloadJson ? payloadJson.totals : null;
+      const usuario = payloadJson ? (payloadJson.usuario || 'Sistema') : (e.parameter.usuario || 'Sistema');
+      return updateSummaryTotals(prateleiraSheet, totals, usuario);
     }
 
     // ðŸ†• Parse do parÃ¢metro localizacoes se vier como string JSON
@@ -57,20 +75,20 @@ function handleRequest(e) {
       quantidadeTotal: parseInt(e.parameter.quantidade) || 0,
       usuario: e.parameter.usuario || 'Sistema',
       dataMovimentacao: new Date().toLocaleString('pt-BR'),
-      // ðŸ†• Ãšltima localizaÃ§Ã£o (para aba Prateleiras - totalizador)
+      // ðŸ†• Última localização (para aba Prateleiras - totalizador)
       ultimaLocalizacao: {
         corredor: e.parameter.corredor || '',
         prateleira: e.parameter.prateleira || '',
         localizacao: e.parameter.localizacao || ''
       },
-      // ðŸ†• Todas as localizaÃ§Ãµes (para aba HistÃ³rico - detalhado)
+      // ðŸ†• Todas as localizações (para aba Histórico - detalhado)
       localizacoes: localizacoesArray
     };
 
-    if (!data.sku) throw new Error('SKU nÃ£o fornecido');
+    if (!data.sku) throw new Error('SKU não fornecido');
 
     Logger.log('ðŸ“¦ Dados recebidos: SKU=' + data.sku + ' COR=' + data.cor + ' QTD=' + data.quantidadeTotal);
-    Logger.log('ðŸ“ LocalizaÃ§Ãµes recebidas: ' + localizacoesArray.length);
+    Logger.log('ðŸ“ Localizações recebidas: ' + localizacoesArray.length);
 
     return updateProductComplete(prateleiraSheet, historicoSheet, data);
 
@@ -93,58 +111,59 @@ function updateProductComplete(prateleiraSheet, historicoSheet, data) {
   const ultimaLocalizacao = data.ultimaLocalizacao || {};
 
   Logger.log('ðŸ”„ Processando: SKU=' + sku + ' COR=' + cor + ' QTD_TOTAL=' + quantidadeTotal);
-  Logger.log('ðŸ“ Total de localizaÃ§Ãµes: ' + localizacoes.length);
+  Logger.log('ðŸ“ Total de localizações: ' + localizacoes.length);
 
   // ============================================
   // ATUALIZAR ABA PRATELEIRAS (TOTALIZADOR)
   // ============================================
 
-  const prateleiraData = prateleiraSheet.getDataRange().getValues();
+  const lastRow = prateleiraSheet.getLastRow();
   let prateleiraRow = -1;
   let quantidadeAnterior = 0;
 
-  // Buscar linha existente (SKU + COR)
-  for (let i = 1; i < prateleiraData.length; i++) {
-    const rowSKU = String(prateleiraData[i][2] || '').toUpperCase().trim();
-    const rowCOR = String(prateleiraData[i][3] || '').toUpperCase().trim();
-
-    if (rowSKU === sku && rowCOR === cor) {
-      prateleiraRow = i + 1;
-      quantidadeAnterior = parseInt(prateleiraData[i][4]) || 0;
-      Logger.log('âœ… Linha encontrada: ' + prateleiraRow + ' (Qtd anterior: ' + quantidadeAnterior + ')');
-      break;
+  if (lastRow >= 11) {
+    const dataRange = prateleiraSheet.getRange(11, 1, lastRow - 10, 8).getValues();
+    for (let i = 0; i < dataRange.length; i++) {
+      const rowSKU = String(dataRange[i][2] || '').toUpperCase().trim();
+      const rowCOR = String(dataRange[i][3] || '').toUpperCase().trim();
+      if (rowSKU === sku && rowCOR === cor) {
+        prateleiraRow = 11 + i;
+        quantidadeAnterior = parseInt(dataRange[i][4]) || 0;
+        Logger.log('âœ… Linha encontrada: ' + prateleiraRow + ' (Qtd anterior: ' + quantidadeAnterior + ')');
+        break;
+      }
     }
   }
 
   let acao = '';
 
   if (quantidadeTotal === 0) {
-    // REMOVER - Produto zerado em todas as localizaÃ§Ãµes
+    // REMOVER - Produto zerado em todas as localizações
     if (prateleiraRow > 0) {
       prateleiraSheet.deleteRow(prateleiraRow);
       acao = 'REMOVER';
       Logger.log('ðŸ—‘ï¸ Linha removida: ' + prateleiraRow);
     } else {
-      Logger.log('âš ï¸ Tentou remover mas linha nÃ£o existe');
+      Logger.log('âš ï¸ Tentou remover mas linha não existe');
       acao = 'REMOVER';
     }
   } else {
     if (prateleiraRow > 0) {
-      // ATUALIZAR linha existente com ÃšLTIMA localizaÃ§Ã£o
+      // ATUALIZAR linha existente com Última localização
       prateleiraSheet.getRange(prateleiraRow, 1, 1, 8).setValues([[
         dataHora,
         usuario,
         sku,
         cor,
         quantidadeTotal,  // ðŸ†• Quantidade TOTAL consolidada
-        ultimaLocalizacao.corredor || '',      // ðŸ†• ÃšLTIMA localizaÃ§Ã£o
-        ultimaLocalizacao.prateleira || '',    // ðŸ†• ÃšLTIMA localizaÃ§Ã£o
-        ultimaLocalizacao.localizacao || ''    // ðŸ†• ÃšLTIMA localizaÃ§Ã£o
+        ultimaLocalizacao.corredor || '',      // ðŸ†• Última localização
+        ultimaLocalizacao.prateleira || '',    // ðŸ†• Última localização
+        ultimaLocalizacao.localizacao || ''    // ðŸ†• Última localização
       ]]);
       acao = quantidadeAnterior === 0 ? 'ADICIONAR' : 'ATUALIZAR';
       Logger.log('âœï¸ Linha atualizada: ' + prateleiraRow + ' com QTD=' + quantidadeTotal);
     } else {
-      // ADICIONAR nova linha com ÃšLTIMA localizaÃ§Ã£o
+      // ADICIONAR nova linha com Última localização
       prateleiraSheet.appendRow([
         dataHora,
         usuario,
@@ -165,7 +184,7 @@ function updateProductComplete(prateleiraSheet, historicoSheet, data) {
   // ============================================
 
   if (localizacoes.length > 0) {
-    // Registrar cada localizaÃ§Ã£o separadamente no histÃ³rico
+    // Registrar cada localização separadamente no Histórico
     localizacoes.forEach(function(loc) {
       historicoSheet.appendRow([
         dataHora,
@@ -174,15 +193,15 @@ function updateProductComplete(prateleiraSheet, historicoSheet, data) {
         sku,
         cor,
         quantidadeAnterior,
-        parseInt(loc.quantidade) || 0,  // Quantidade especÃ­fica desta localizaÃ§Ã£o
+        parseInt(loc.quantidade) || 0,  // Quantidade especÃ­fica desta localização
         loc.localizacao || '',
         loc.corredor || '',
         loc.prateleira || ''
       ]);
     });
-    Logger.log('ðŸ“ ' + localizacoes.length + ' entrada(s) registradas no histÃ³rico');
+    Logger.log('ðŸ“ ' + localizacoes.length + ' entrada(s) registradas no Histórico');
   } else {
-    // Fallback: registrar entrada Ãºnica sem localizaÃ§Ã£o especÃ­fica
+    // Fallback: registrar entrada Ãºnica sem localização especÃ­fica
     historicoSheet.appendRow([
       dataHora,
       usuario,
@@ -195,7 +214,7 @@ function updateProductComplete(prateleiraSheet, historicoSheet, data) {
       ultimaLocalizacao.corredor || '',
       ultimaLocalizacao.prateleira || ''
     ]);
-    Logger.log('ðŸ“ 1 entrada no histÃ³rico (sem array de localizaÃ§Ãµes)');
+    Logger.log('ðŸ“ 1 entrada no Histórico (sem array de localizações)');
   }
 
   return ContentService
@@ -209,9 +228,46 @@ function updateProductComplete(prateleiraSheet, historicoSheet, data) {
     .setMimeType(ContentService.MimeType.JSON);
 }
 
-function formatHeader(sheet) {
-  const headerRange = sheet.getRange(1, 1, 1, sheet.getLastColumn());
+function formatHeader(sheet, headerRow) {
+  const row = headerRow || 1;
+  const headerRange = sheet.getRange(row, 1, 1, sheet.getLastColumn());
   headerRange.setFontWeight('bold');
   headerRange.setBackground('#4285f4');
   headerRange.setFontColor('#ffffff');
+}
+function updateSummaryTotals(sheet, totals, usuario) {
+  const produtosUnicos = totals && totals.produtosUnicos ? parseInt(totals.produtosUnicos) : 0;
+  const quantidadeTotal = totals && totals.quantidadeTotal ? parseInt(totals.quantidadeTotal) : 0;
+  const coresDiferentes = totals && totals.coresDiferentes ? parseInt(totals.coresDiferentes) : 0;
+  const corredores = totals && totals.corredores ? parseInt(totals.corredores) : 0;
+  const timestamp = totals && totals.timestamp ? String(totals.timestamp) : new Date().toISOString();
+
+  sheet.getRange(1, 1).setValue('Resumo');
+  sheet.getRange(1, 2).setValue(usuario + ' ' + timestamp);
+  sheet.getRange(2, 1).setValue('Produtos Únicos');
+  sheet.getRange(2, 2).setValue(produtosUnicos);
+  sheet.getRange(3, 1).setValue('Quantidade Total');
+  sheet.getRange(3, 2).setValue(quantidadeTotal);
+  sheet.getRange(4, 1).setValue('Cores Diferentes');
+  sheet.getRange(4, 2).setValue(coresDiferentes);
+  sheet.getRange(5, 1).setValue('Corredores');
+  sheet.getRange(5, 2).setValue(corredores);
+
+  sheet.getRange(2, 3).setFormula('=COUNTA(UNIQUE(FILTER(C11:C, C11:C<>"")))');
+  sheet.getRange(3, 3).setFormula('=SUM(E11:E)');
+  sheet.getRange(4, 3).setFormula('=COUNTA(UNIQUE(FILTER(D11:D, D11:D<>"")))');
+  sheet.getRange(5, 3).setFormula('=COUNTA(UNIQUE(FILTER(F11:F, F11:F<>"")))');
+
+  var ss = sheet.getParent();
+  try {
+    var ranges = ss.getNamedRanges();
+    var existing = null;
+    for (var i = 0; i < ranges.length; i++) { if (ranges[i].getName() === 'TOTALIZADORES') { existing = ranges[i]; break; } }
+    var totalRange = sheet.getRange(1, 1, 5, 3);
+    if (existing) { existing.setRange(totalRange); } else { ss.addNamedRange('TOTALIZADORES', totalRange); }
+  } catch (e) {}
+
+  return ContentService
+    .createTextOutput(JSON.stringify({ success: true, updated: true }))
+    .setMimeType(ContentService.MimeType.JSON);
 }
