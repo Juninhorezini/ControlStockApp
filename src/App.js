@@ -961,6 +961,40 @@ const fetchLocationsFromFirebase = async (sku, color) => {
     }
   };
 
+  const lastSummarySentRef = useRef(0);
+  const sendSummaryTotalsDebounced = async () => {
+    if (!sheetsUrl) return;
+    const now = Date.now();
+    if (now - (lastSummarySentRef.current || 0) < 30000) return;
+    lastSummarySentRef.current = now;
+    await new Promise(resolve => setTimeout(resolve, 1200));
+    const consolidatedProducts = consolidateProductsBySKUColor();
+    const uniqueSkus = new Set(consolidatedProducts.map(p => String(p.sku).trim()));
+    const totalQuantity = consolidatedProducts.reduce((sum, p) => sum + (Number(p.quantity) || 0), 0);
+    const uniqueColors = new Set(consolidatedProducts.map(p => String(p.color).trim()));
+    const uniqueCorridors = new Set(
+      consolidatedProducts
+        .map(p => p.localizacoes)
+        .flat()
+        .map(loc => String(loc.corredor || '').trim())
+        .filter(c => c)
+    );
+    const summaryPayload = {
+      action: 'summaryTotals',
+      usuario: user?.name || 'App React',
+      totals: {
+        produtosUnicos: uniqueSkus.size,
+        quantidadeTotal: totalQuantity,
+        coresDiferentes: uniqueColors.size,
+        corredores: uniqueCorridors.size,
+        timestamp: new Date().toISOString()
+      }
+    };
+    try {
+      await fetch(sheetsUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(summaryPayload) });
+    } catch (e) {}
+  };
+
   // Funções de backup e restore
   const exportBackup = () => {
     const backupData = {
@@ -1422,6 +1456,7 @@ const fetchLocationsFromFirebase = async (sku, color) => {
                 const lastUpdaterId = backendSnapshot?.lastUpdatedBy;
                 const lastUpdaterName = lastUpdaterId ? (userNames?.[lastUpdaterId] || lastUpdaterId) : null;
                 enqueueSheetSync(locSku, locColor, backendSnapshot, lastUpdaterName);
+                sendSummaryTotalsDebounced();
               })();
             }
           } catch (err) {
@@ -1463,6 +1498,7 @@ const fetchLocationsFromFirebase = async (sku, color) => {
                 const lastUpdaterId = backendSnapshot?.lastUpdatedBy;
                 const lastUpdaterName = lastUpdaterId ? (userNames?.[lastUpdaterId] || lastUpdaterId) : null;
                 enqueueSheetSync(locSku, locColor, backendSnapshot, lastUpdaterName);
+                sendSummaryTotalsDebounced();
               })();
             }
           } catch (err) {
@@ -1492,6 +1528,15 @@ const fetchLocationsFromFirebase = async (sku, color) => {
         });
 
         console.log('Location removida:', snapshot.key);
+        if (initialLoadComplete) {
+          try {
+            const updatedByRaw = loc.metadata?.updated_by;
+            const updatedBy = (typeof updatedByRaw === 'string') ? updatedByRaw : (updatedByRaw?.displayName || (updatedByRaw?.uid ? userNames?.[updatedByRaw.uid] : null));
+            if (updatedBy && updatedBy === user.name) {
+              sendSummaryTotalsDebounced();
+            }
+          } catch (err) {}
+        }
       });
 
       return () => {

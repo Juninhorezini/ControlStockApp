@@ -34,6 +34,7 @@ function handleRequest(e) {
       formatHeader(prateleiraSheet, 10);
       prateleiraSheet.setFrozenRows(10);
     }
+    ensureTotalsBlock(prateleiraSheet);
 
     if (!historicoSheet) {
       historicoSheet = ss.insertSheet('Histórico');
@@ -270,4 +271,22 @@ function updateSummaryTotals(sheet, totals, usuario) {
   return ContentService
     .createTextOutput(JSON.stringify({ success: true, updated: true }))
     .setMimeType(ContentService.MimeType.JSON);
+}
+function ensureTotalsBlock(sheet) {
+  var ss = sheet.getParent();
+  var totalRange = sheet.getRange(1, 1, 5, 3);
+  var c2 = sheet.getRange(2, 3);
+  var c3 = sheet.getRange(3, 3);
+  var c4 = sheet.getRange(4, 3);
+  var c5 = sheet.getRange(5, 3);
+  if (!c2.getFormula()) c2.setFormula('=COUNTA(UNIQUE(FILTER(C11:C, C11:C<>"")))');
+  if (!c3.getFormula()) c3.setFormula('=SUM(E11:E)');
+  if (!c4.getFormula()) c4.setFormula('=COUNTA(UNIQUE(FILTER(D11:D, D11:D<>"")))');
+  if (!c5.getFormula()) c5.setFormula('=COUNTA(UNIQUE(FILTER(F11:F, F11:F<>"")))');
+  try {
+    var ranges = ss.getNamedRanges();
+    var existing = null;
+    for (var i = 0; i < ranges.length; i++) { if (ranges[i].getName() === 'TOTALIZADORES') { existing = ranges[i]; break; } }
+    if (existing) { existing.setRange(totalRange); } else { ss.addNamedRange('TOTALIZADORES', totalRange); }
+  } catch (e) {}
 }
