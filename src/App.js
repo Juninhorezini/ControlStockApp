@@ -201,6 +201,21 @@ const StockControlApp = () => {
   const [sheetsUrl, setSheetsUrl] = useStoredState('sheetsUrl', SHEETS_API_URL);
   const [syncStatus, setSyncStatus] = useState('');
 
+  const lastSheetSyncRef = useRef({});
+
+  const enqueueSheetSync = async (sku, color, snapshot, lastUpdaterName) => {
+    try {
+      const key = `${String(sku).trim()}-${String(color).trim()}`;
+      const now = Date.now();
+      const prev = lastSheetSyncRef.current[key] || 0;
+      if (now - prev < 1200) {
+        return;
+      }
+      lastSheetSyncRef.current[key] = now;
+      await syncSingleProductWithSheets(sku, color, snapshot, lastUpdaterName);
+    } catch (e) {}
+  };
+
   useEffect(() => {
     (async () => {
       try {
@@ -4857,17 +4872,3 @@ const saveProduct = async () => {
 };
 
 export default StockControlApp;
-  const lastSheetSyncRef = useRef({});
-
-  const enqueueSheetSync = async (sku, color, snapshot, lastUpdaterName) => {
-    try {
-      const key = `${String(sku).trim()}-${String(color).trim()}`;
-      const now = Date.now();
-      const prev = lastSheetSyncRef.current[key] || 0;
-      if (now - prev < 1200) {
-        return;
-      }
-      lastSheetSyncRef.current[key] = now;
-      await syncSingleProductWithSheets(sku, color, snapshot, lastUpdaterName);
-    } catch (e) {}
-  };
