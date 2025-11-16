@@ -1724,8 +1724,19 @@ const computeTotalsFromFirebase = async () => {
           return newProds;
         });
 
-        console.log('Location removida:', snapshot.key);
+      console.log('Location removida:', snapshot.key);
         if (initialLoadComplete) {
+          try {
+            await new Promise(resolve => setTimeout(resolve, 600));
+            const locSku = loc.sku;
+            const locColor = loc.color;
+            const backendSnapshot = await fetchLocationsFromFirebase(locSku, locColor);
+            const lastUpdaterId = backendSnapshot?.lastUpdatedBy;
+            const lastUpdaterName = lastUpdaterId ? await resolveUserDisplayName(lastUpdaterId) : null;
+            await enqueueSheetSync(locSku, locColor, backendSnapshot, lastUpdaterName || (user?.name || null));
+          } catch (err) {
+            console.error('❌ Erro ao sincronizar após remoção:', err);
+          }
           sendSummaryTotalsDebounced();
         }
       });
@@ -2468,7 +2479,15 @@ const saveProduct = async () => {
           const stillExists = validColors.some(newColor => newColor.code === oldColor.code);
           if (!stillExists) {
             // Se a cor foi removida localmente, confirmar no backend e enviar resultado
-            
+            try {
+              await new Promise(resolve => setTimeout(resolve, 800));
+              const backendSnapshot = await fetchLocationsFromFirebase(updatedProduct.sku, oldColor.code);
+              const lastUpdaterId = backendSnapshot?.lastUpdatedBy;
+              const lastUpdaterName = lastUpdaterId ? await resolveUserDisplayName(lastUpdaterId) : null;
+              await enqueueSheetSync(updatedProduct.sku, oldColor.code, backendSnapshot, lastUpdaterName || (user?.name || null));
+            } catch (syncErr) {
+              console.warn('⚠️ Erro ao sincronizar remoção de cor:', syncErr);
+            }
           }
         }
       }
