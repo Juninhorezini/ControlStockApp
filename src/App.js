@@ -1726,18 +1726,21 @@ const computeTotalsFromFirebase = async () => {
 
       console.log('Location removida:', snapshot.key);
         if (initialLoadComplete) {
-          try {
-            await new Promise(resolve => setTimeout(resolve, 600));
-            const locSku = loc.sku;
-            const locColor = loc.color;
-            const backendSnapshot = await fetchLocationsFromFirebase(locSku, locColor);
-            const lastUpdaterId = backendSnapshot?.lastUpdatedBy;
-            const lastUpdaterName = lastUpdaterId ? await resolveUserDisplayName(lastUpdaterId) : null;
-            await enqueueSheetSync(locSku, locColor, backendSnapshot, lastUpdaterName || (user?.name || null));
-          } catch (err) {
-            console.error('❌ Erro ao sincronizar após remoção:', err);
-          }
-          sendSummaryTotalsDebounced();
+          (async () => {
+            try {
+              await new Promise(resolve => setTimeout(resolve, 600));
+              const locSku = loc.sku;
+              const locColor = loc.color;
+              const backendSnapshot = await fetchLocationsFromFirebase(locSku, locColor);
+              const lastUpdaterId = backendSnapshot?.lastUpdatedBy;
+              const lastUpdaterName = lastUpdaterId ? await resolveUserDisplayName(lastUpdaterId) : null;
+              await enqueueSheetSync(locSku, locColor, backendSnapshot, lastUpdaterName || (user?.name || null));
+            } catch (err) {
+              console.error('❌ Erro ao sincronizar após remoção:', err);
+            } finally {
+              sendSummaryTotalsDebounced();
+            }
+          })();
         }
       });
 
