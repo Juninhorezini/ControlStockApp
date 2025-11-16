@@ -1645,17 +1645,19 @@ const computeTotalsFromFirebase = async () => {
             const updatedByRaw = loc.metadata?.updated_by;
             const updatedBy = (typeof updatedByRaw === 'string') ? updatedByRaw : (updatedByRaw?.displayName || (updatedByRaw?.uid ? userNames?.[updatedByRaw.uid] : null));
             if (updatedBy && updatedBy === user.name) {
-              const backendSnapshot = await fetchLocationsFromFirebase(locSku, locColor);
-              const shelfObj = loc.shelf || {};
-              const pos = loc.position || {};
-              const lastLocOverride = {
-                corredor: shelfObj.corridor || (shelfObj.name ? shelfObj.name.charAt(0) : ''),
-                prateleira: shelfObj.name || '',
-                localizacao: (typeof shelfObj.rows === 'number' && typeof pos.row === 'number' && typeof pos.col === 'number')
-                  ? `L${shelfObj.rows - pos.row}:C${pos.col + 1}`
-                  : ''
-              };
-              enqueueSheetSync(locSku, locColor, backendSnapshot, updatedBy, lastLocOverride);
+              (async () => {
+                const backendSnapshot = await fetchLocationsFromFirebase(locSku, locColor);
+                const shelfObj = loc.shelf || {};
+                const pos = loc.position || {};
+                const lastLocOverride = {
+                  corredor: shelfObj.corridor || (shelfObj.name ? shelfObj.name.charAt(0) : ''),
+                  prateleira: shelfObj.name || '',
+                  localizacao: (typeof shelfObj.rows === 'number' && typeof pos.row === 'number' && typeof pos.col === 'number')
+                    ? `L${shelfObj.rows - pos.row}:C${pos.col + 1}`
+                    : ''
+                };
+                enqueueSheetSync(locSku, locColor, backendSnapshot, updatedBy, lastLocOverride);
+              })();
             }
             sendSummaryTotalsDebounced();
           } catch (err) {
@@ -1694,17 +1696,19 @@ const computeTotalsFromFirebase = async () => {
             const updatedByRaw = loc.metadata?.updated_by;
             const updatedBy = (typeof updatedByRaw === 'string') ? updatedByRaw : (updatedByRaw?.displayName || (updatedByRaw?.uid ? userNames?.[updatedByRaw.uid] : null));
             if (updatedBy && updatedBy === user.name) {
-              const backendSnapshot = await fetchLocationsFromFirebase(locSku, locColor);
-              const shelfObj = loc.shelf || {};
-              const pos = loc.position || {};
-              const lastLocOverride = {
-                corredor: shelfObj.corridor || (shelfObj.name ? shelfObj.name.charAt(0) : ''),
-                prateleira: shelfObj.name || '',
-                localizacao: (typeof shelfObj.rows === 'number' && typeof pos.row === 'number' && typeof pos.col === 'number')
-                  ? `L${shelfObj.rows - pos.row}:C${pos.col + 1}`
-                  : ''
-              };
-              enqueueSheetSync(locSku, locColor, backendSnapshot, updatedBy, lastLocOverride);
+              (async () => {
+                const backendSnapshot = await fetchLocationsFromFirebase(locSku, locColor);
+                const shelfObj = loc.shelf || {};
+                const pos = loc.position || {};
+                const lastLocOverride = {
+                  corredor: shelfObj.corridor || (shelfObj.name ? shelfObj.name.charAt(0) : ''),
+                  prateleira: shelfObj.name || '',
+                  localizacao: (typeof shelfObj.rows === 'number' && typeof pos.row === 'number' && typeof pos.col === 'number')
+                    ? `L${shelfObj.rows - pos.row}:C${pos.col + 1}`
+                    : ''
+                };
+                enqueueSheetSync(locSku, locColor, backendSnapshot, updatedBy, lastLocOverride);
+              })();
             }
             sendSummaryTotalsDebounced();
           } catch (err) {
