@@ -825,15 +825,16 @@ const computeTotalsFromFirebase = async () => {
     const locsRef = ref(database, 'locations');
 
     const [shelvesSnapshot, locsSnapshot] = await Promise.all([
-      get(shelvesRef),
-      get(locsRef)
-    ]);
+        get(shelvesRef),
+        get(locsRef)
+      ]);
 
-    const allShelves = shelvesSnapshot.val() || [];
-    const allLocs = locsSnapshot.val() || {};
+      const shelvesData = shelvesSnapshot.val() || {};
+      const allShelves = Object.values(shelvesData);
+      const allLocs = locsSnapshot.val() || {};
 
-    // 2. Criar um mapa de prateleiras para consulta rápida
-    const shelvesMap = allShelves.reduce((acc, shelf) => {
+      // 2. Criar um mapa de prateleiras para consulta rápida
+      const shelvesMap = allShelves.reduce((acc, shelf) => {
       if (shelf && shelf.id) {
         acc[shelf.id] = shelf;
       }
