@@ -1673,6 +1673,9 @@ const computeTotalsFromFirebase = async () => {
             if (colorIndex >= 0) {
               newProds[key].colors[colorIndex] = { code: loc.color, quantity: loc.quantity };
               newProds[key].lastModified = new Date(loc.metadata.updated_at).toISOString();
+            } else {
+              newProds[key].colors.push({ code: loc.color, quantity: loc.quantity });
+              newProds[key].lastModified = new Date(loc.metadata.updated_at).toISOString();
             }
           }
           return newProds;
@@ -2283,9 +2286,9 @@ const computeTotalsFromFirebase = async () => {
 
 
   // Helper: Salvar produto no Firebase
-  const saveProductToFirebase = async (shelfId, row, col, productData) => {
-    try {
-      console.log('💾 Salvando no Firebase:', { shelfId, row, col, productData });
+const saveProductToFirebase = async (shelfId, row, col, productData) => {
+  try {
+    console.log('💾 Salvando no Firebase:', { shelfId, row, col, productData });
 
       if (!productData.sku || !productData.colors || productData.colors.length === 0) {
         // Deletar todas as localizações deste produto
@@ -2304,90 +2307,68 @@ const computeTotalsFromFirebase = async () => {
         return;
       }
 
-      // Salvar cada cor como uma localização
+      // Salvar cada cor como uma localização com atualização atômica
       const currentShelf = shelves.find(s => s.id === shelfId);
       if (!currentShelf) return;
 
-      // Primeiro, remover todas as locations antigas desta posição
-
-
+      // Buscar locations atuais e aplicar diff atômico
       const locsRef = ref(database, 'locations');
-
-
       const snapshot = await new Promise(resolve => {
-
-
         onValue(locsRef, resolve, { onlyOnce: true });
-
-
       });
-
-
       const allLocs = snapshot.val() || {};
 
-
-      
-
-
-      // Remover locations antigas desta posição
-
-
-      for (const [locId, loc] of Object.entries(allLocs)) {
-
-
-        if (loc.shelf.id === currentShelf.id && loc.position.row === row && loc.position.col === col) {
-
-
-          await remove(ref(database, `locations/${locId}`));
-
-
-          console.log('🗑️ Removida location antiga:', locId);
-
-
-        }
-
-
-      }
-
-
-      
-
-
-      // Agora salvar as novas locations
-
-
+      const desired = {};
       for (const color of productData.colors) {
-        if (!(Number(color?.quantity) > 0)) {
-          continue;
+        const qty = Number(color?.quantity);
+        if (!color?.code) continue;
+        if (qty > 0) {
+          const locationId = `loc_${currentShelf.id}_${row}_${col}_${sanitizeKeySegment(color.code)}`;
+          desired[color.code] = {
+            id: locationId,
+            data: {
+              sku: productData.sku,
+              color: color.code,
+              quantity: qty,
+              unit: productData.unit || 'unidades',
+              shelf: {
+                id: currentShelf.id,
+                name: currentShelf.name,
+                corridor: currentShelf.corridor || currentShelf.name[0]
+              },
+              position: {
+                row: row,
+                col: col,
+                label: `L${currentShelf.rows - row}:C${col + 1}`
+              },
+              metadata: {
+                created_at: Date.now(),
+                updated_at: Date.now(),
+                created_by: user.name,
+                updated_by: user.name
+              }
+            }
+          };
         }
-        const locationData = {
-          sku: productData.sku,
-          color: color.code,
-          quantity: color.quantity,
-          unit: productData.unit || 'unidades',
-          shelf: {
-            id: currentShelf.id,
-            name: currentShelf.name,
-            corridor: currentShelf.corridor || currentShelf.name[0]
-          },
-          position: {
-            row: row,
-            col: col,
-            label: `L${currentShelf.rows - row}:C${col + 1}`
-          },
-          metadata: {
-            created_at: Date.now(),
-            updated_at: Date.now(),
-            created_by: user.name,
-            updated_by: user.name
-          }
-        };
-
-        // Criar ID determinístico para evitar duplicação
-        const locationId = `loc_${currentShelf.id}_${row}_${col}_${sanitizeKeySegment(color.code)}`;
-        await set(ref(database, `locations/${locationId}`), locationData);
-        console.log('✅ Salvo no Firebase:', locationId);
       }
+
+      const updates = {};
+      // Remover cores não desejadas
+      for (const [locId, loc] of Object.entries(allLocs)) {
+        if (loc.shelf.id === currentShelf.id && loc.position.row === row && loc.position.col === col) {
+          if (!desired[loc.color]) {
+            updates[`locations/${locId}`] = null;
+          }
+        }
+      }
+
+      // Upsert cores desejadas
+      for (const entry of Object.values(desired)) {
+        updates[`locations/${entry.id}`] = entry.data;
+      }
+
+      await update(ref(database), updates);
+      console.log('✅ Atualização atômica aplicada para posição', { shelfId: currentShelf.id, row, col });
 
 
 
