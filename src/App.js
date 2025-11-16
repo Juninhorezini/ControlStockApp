@@ -821,9 +821,7 @@ const fetchLocationsFromFirebase = async (sku, color) => {
 const computeTotalsFromFirebase = async () => {
   try {
     const locsRef = ref(database, 'locations');
-    const snapshot = await new Promise((resolve) => {
-      onValue(locsRef, resolve, { onlyOnce: true });
-    });
+    const snapshot = await get(locsRef);
     const allLocs = snapshot.val() || {};
     const skuSet = new Set();
     const colorSet = new Set();
@@ -994,10 +992,31 @@ const computeTotalsFromFirebase = async () => {
   const sendSummaryTotalsDebounced = async () => {
     if (!sheetsUrl) return;
     const now = Date.now();
-    if (now - (lastSummarySentRef.current || 0) < 30000) return;
+    if (now - (lastSummarySentRef.current || 0) < 10000) return;
     lastSummarySentRef.current = now;
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    const totals = await computeTotalsFromFirebase();
+    await new Promise(resolve => setTimeout(resolve, 2500));
+    let totals = await computeTotalsFromFirebase();
+    if (
+      totals.produtosUnicos === 0 &&
+      totals.quantidadeTotal === 0 &&
+      totals.coresDiferentes === 0 &&
+      totals.corredores === 0 &&
+      products && Object.keys(products || {}).length > 0
+    ) {
+      const consolidatedProducts = consolidateProductsBySKUColor();
+      const uniqueSkus = new Set(consolidatedProducts.map(p => String(p.sku).trim()));
+      const totalQuantity = consolidatedProducts.reduce((sum, p) => sum + (Number(p.quantity) || 0), 0);
+      const uniqueColors = new Set(consolidatedProducts.map(p => String(p.color).trim()));
+      const uniqueCorridors = new Set(
+        consolidatedProducts.map(p => p.localizacoes).flat().map(loc => String(loc.corredor || '').trim()).filter(c => c)
+      );
+      totals = {
+        produtosUnicos: uniqueSkus.size,
+        quantidadeTotal: totalQuantity,
+        coresDiferentes: uniqueColors.size,
+        corredores: uniqueCorridors.size
+      };
+    }
     const params = new URLSearchParams({
       callback: 'handleSyncResponse',
       action: 'summaryTotals',
@@ -1008,10 +1027,11 @@ const computeTotalsFromFirebase = async () => {
       corredores: String(totals.corredores),
       timestamp: new Date().toISOString()
     });
-    await new Promise((resolve, reject) => {
+    const urls = new Set([sheetsUrl, SHEETS_API_URL].filter(Boolean));
+    await Promise.all(Array.from(urls).map(u => new Promise((resolve, reject) => {
       try {
         const script = document.createElement('script');
-        script.src = `${sheetsUrl}?${params.toString()}`;
+        script.src = `${u}?${params.toString()}`;
         script.onload = () => resolve();
         script.onerror = () => reject(new Error('summary_jsonp_failed'));
         document.body.appendChild(script);
@@ -1019,7 +1039,7 @@ const computeTotalsFromFirebase = async () => {
       } catch (err) {
         reject(err);
       }
-    }).catch(() => {});
+    }).catch(() => {})));
   };
 
   // Funções de backup e restore
