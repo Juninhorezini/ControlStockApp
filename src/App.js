@@ -2448,11 +2448,23 @@ const saveProduct = async () => {
     const previousColors = (oldProduct?.colors || []);
     const incomingColors = (editingProduct.colors || []);
     const byCode = {};
+    // 1. Prime with previous colors
     for (const c of previousColors) {
-      if (c && c.code) byCode[String(c.code)] = { code: c.code, quantity: Number(c.quantity) || 0 };
+      if (c && c.code) {
+        byCode[String(c.code)] = { code: c.code, quantity: Number(c.quantity) || 0 };
+      }
     }
+    // 2. Merge incoming colors, preserving old quantity if new one is missing
     for (const c of incomingColors) {
-      if (c && c.code) byCode[String(c.code)] = { code: c.code, quantity: Number(c.quantity) || 0 };
+      if (c && c.code) {
+        const code = String(c.code);
+        const existingQuantity = byCode[code] ? byCode[code].quantity : 0;
+        const newQuantity = (c.quantity !== undefined && c.quantity !== null) 
+          ? Number(c.quantity) 
+          : existingQuantity;
+
+        byCode[code] = { code: code, quantity: newQuantity };
+      }
     }
     const mergedColors = Object.values(byCode);
     const validColors = mergedColors.filter(c => Number(c.quantity) > 0);
