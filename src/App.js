@@ -200,6 +200,12 @@ const StockControlApp = () => {
   const [importSummary, setImportSummary] = useState(null);
   const [isImporting, setIsImporting] = useState(false);
 
+  const sanitizeKeySegment = (str) => {
+    const s = String(str || '').trim();
+    const r = s.replace(/[.#$\[\]\/]/g, '_').replace(/\s+/g, '_');
+    return r.length ? r : 'x';
+  };
+
   // Estados para Google Sheets
   const [showSheetsModal, setShowSheetsModal] = useState(false);
   const [sheetsUrl, setSheetsUrl] = useStoredState('sheetsUrl', SHEETS_API_URL);
@@ -1152,6 +1158,7 @@ const computeTotalsFromFirebase = async () => {
     let totalQuantity = 0;
     const skuSet = new Set();
     const colorSet = new Set();
+    let sanitizedSegments = 0;
     Object.entries(productsObj || {}).forEach(([key, prod]) => {
       productPositions += 1;
       if (prod && prod.sku) skuSet.add(String(prod.sku).trim());
@@ -1160,9 +1167,10 @@ const computeTotalsFromFirebase = async () => {
         colorSet.add(String(c.code || '').trim());
         locationRecords += 1;
         totalQuantity += Number(c.quantity) || 0;
+        if (/[.#$\[\]\/\s]/.test(String(c.code || ''))) sanitizedSegments += 1;
       });
     });
-    return { shelvesCount, productPositions, locationRecords, totalQuantity, uniqueSkus: skuSet.size, uniqueColors: colorSet.size };
+    return { shelvesCount, productPositions, locationRecords, totalQuantity, uniqueSkus: skuSet.size, uniqueColors: colorSet.size, sanitizedSegments };
   };
 
   const applyBackupToFirebase = async ({ shelvesList, productsObj }, { mode = 'replace', batchSize = 200 } = {}) => {
@@ -1190,7 +1198,7 @@ const computeTotalsFromFirebase = async () => {
         const shelf = shelvesById[shelfId] || shelves.find(s => s.id === shelfId);
         const colors = Array.isArray(prod?.colors) ? prod.colors : [];
         for (const color of colors) {
-          const locationId = `loc_${shelfId}_${row}_${col}_${String(color.code)}`;
+          const locationId = `loc_${shelfId}_${row}_${col}_${sanitizeKeySegment(color.code)}`;
           const locationData = {
             sku: prod.sku,
             color: color.code,
@@ -2225,7 +2233,7 @@ const computeTotalsFromFirebase = async () => {
       } else if (color.quantity > 0) {
         // Update ou Create - usar ID determinístico
         if (!locationId) {
-          locationId = `loc_${shelfId}_${row}_${col}_${color.code}`;
+          locationId = `loc_${shelfId}_${row}_${col}_${sanitizeKeySegment(color.code)}`;
         }
 
         const locationData = {
@@ -2359,7 +2367,7 @@ const computeTotalsFromFirebase = async () => {
         };
 
         // Criar ID determinístico para evitar duplicação
-        const locationId = `loc_${currentShelf.id}_${row}_${col}_${color.code}`;
+        const locationId = `loc_${currentShelf.id}_${row}_${col}_${sanitizeKeySegment(color.code)}`;
         await set(ref(database, `locations/${locationId}`), locationData);
         console.log('✅ Salvo no Firebase:', locationId);
       }
@@ -4742,6 +4750,7 @@ const saveProduct = async () => {
                               <div>Quantidade total: <strong>{importSummary.totalQuantity}</strong></div>
                               <div>SKUs únicos: <strong>{importSummary.uniqueSkus}</strong></div>
                               <div>Cores únicas: <strong>{importSummary.uniqueColors}</strong></div>
+                              <div>Ajustes de IDs: <strong>{importSummary.sanitizedSegments}</strong></div>
                             </div>
                           </div>
                         )}
