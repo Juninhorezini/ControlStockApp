@@ -269,19 +269,7 @@ function updateSummaryTotals(sheet, totals, usuario) {
   sheet.getRange(5, 1).setValue('Corredores');
   sheet.getRange(5, 2).setValue(corredores);
 
-  sheet.getRange(2, 3).setFormula('=COUNTA(UNIQUE(FILTER(C11:C, C11:C<>"")))');
-  sheet.getRange(3, 3).setFormula('=SUM(E11:E)');
-  sheet.getRange(4, 3).setFormula('=COUNTA(UNIQUE(FILTER(D11:D, D11:D<>"")))');
-  sheet.getRange(5, 3).setFormula('=COUNTA(UNIQUE(FILTER(F11:F, F11:F<>"")))');
-
-  var ss = sheet.getParent();
-  try {
-    var ranges = ss.getNamedRanges();
-    var existing = null;
-    for (var i = 0; i < ranges.length; i++) { if (ranges[i].getName() === 'TOTALIZADORES') { existing = ranges[i]; break; } }
-    var totalRange = sheet.getRange(1, 1, 5, 3);
-    if (existing) { existing.setRange(totalRange); } else { ss.addNamedRange('TOTALIZADORES', totalRange); }
-  } catch (e) {}
+  
 
   return ContentService
     .createTextOutput(JSON.stringify({ success: true, updated: true }))
@@ -294,10 +282,10 @@ function ensureTotalsBlock(sheet) {
   var c3 = sheet.getRange(3, 3);
   var c4 = sheet.getRange(4, 3);
   var c5 = sheet.getRange(5, 3);
-  if (!c2.getFormula()) c2.setFormula('=COUNTA(UNIQUE(FILTER(C11:C; C11:C<>"")))');
-  if (!c3.getFormula()) c3.setFormula('=SUM(E11:E)');
-  if (!c4.getFormula()) c4.setFormula('=COUNTA(UNIQUE(FILTER(D11:D; D11:D<>"")))');
-  if (!c5.getFormula()) c5.setFormula('=COUNTA(UNIQUE(FILTER(F11:F; F11:F<>"")))');
+  c2.setFormula('=COUNTA(UNIQUE(FILTER(C11:C; C11:C<>"")))');
+  c3.setFormula('=SUM(E11:E)');
+  c4.setFormula('=COUNTA(UNIQUE(FILTER(D11:D; D11:D<>"")))');
+  c5.setFormula('=COUNTA(UNIQUE(FILTER(F11:F; F11:F<>"")))');
   try {
     var ranges = ss.getNamedRanges();
     var existing = null;

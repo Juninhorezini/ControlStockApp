@@ -820,20 +820,44 @@ const fetchLocationsFromFirebase = async (sku, color) => {
 
 const computeTotalsFromFirebase = async () => {
   try {
+    // 1. Buscar prateleiras e localizações do Firebase
+    const shelvesRef = ref(database, 'shelves');
     const locsRef = ref(database, 'locations');
-    const snapshot = await get(locsRef);
-    const allLocs = snapshot.val() || {};
+
+    const [shelvesSnapshot, locsSnapshot] = await Promise.all([
+      get(shelvesRef),
+      get(locsRef)
+    ]);
+
+    const allShelves = shelvesSnapshot.val() || [];
+    const allLocs = locsSnapshot.val() || {};
+
+    // 2. Criar um mapa de prateleiras para consulta rápida
+    const shelvesMap = allShelves.reduce((acc, shelf) => {
+      if (shelf && shelf.id) {
+        acc[shelf.id] = shelf;
+      }
+      return acc;
+    }, {});
+
+    // 3. Calcular os totais
     const skuSet = new Set();
     const colorSet = new Set();
     const corridorSet = new Set();
     let totalQuantity = 0;
+
     for (const [, loc] of Object.entries(allLocs)) {
       if (loc.sku) skuSet.add(String(loc.sku).trim());
       if (loc.color) colorSet.add(String(loc.color).trim());
-      const corr = String((loc.shelf && (loc.shelf.corridor || loc.shelf.name && loc.shelf.name.charAt(0))) || '').trim();
+      
+      // Usar o mapa de prateleiras para encontrar o corredor
+      const shelf = shelvesMap[loc.shelfId];
+      const corr = shelf ? String((shelf.corridor || (shelf.name && shelf.name.charAt(0))) || '').trim() : '';
       if (corr) corridorSet.add(corr);
+      
       totalQuantity += Number(loc.quantity) || 0;
     }
+
     return {
       produtosUnicos: skuSet.size,
       quantidadeTotal: totalQuantity,
@@ -841,6 +865,7 @@ const computeTotalsFromFirebase = async () => {
       corredores: corridorSet.size
     };
   } catch (e) {
+    console.error("Erro ao calcular totais do Firebase:", e);
     return { produtosUnicos: 0, quantidadeTotal: 0, coresDiferentes: 0, corredores: 0 };
   }
 };
@@ -994,7 +1019,6 @@ const computeTotalsFromFirebase = async () => {
     const now = Date.now();
     if (now - (lastSummarySentRef.current || 0) < 10000) return;
     lastSummarySentRef.current = now;
-    await new Promise(resolve => setTimeout(resolve, 2500));
     let totals = await computeTotalsFromFirebase();
     if (
       totals.produtosUnicos === 0 &&
