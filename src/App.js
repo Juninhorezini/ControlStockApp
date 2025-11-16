@@ -2357,6 +2357,9 @@ const computeTotalsFromFirebase = async () => {
 
 
       for (const color of productData.colors) {
+        if (!(Number(color?.quantity) > 0)) {
+          continue;
+        }
         const locationData = {
           sku: productData.sku,
           color: color.code,
@@ -2442,7 +2445,7 @@ const saveProduct = async () => {
       }
     }
   } else {
-    const validColors = editingProduct.colors.filter(color => color.code && color.code.trim() !== '');
+    const validColors = (editingProduct.colors || []).filter(color => color.code && color.code.trim() !== '' && Number(color.quantity) > 0);
     if (validColors.length > 0) {
       const updatedProduct = {
         ...editingProduct,
@@ -2450,22 +2453,10 @@ const saveProduct = async () => {
         lastModified: new Date().toISOString(),
         modifiedBy: user.name
       };
-      
-      const newProducts = {
-        ...(products || {}),
-        [editingPosition.key]: updatedProduct
-      };
-      
+      const newProducts = { ...(products || {}), [editingPosition.key]: updatedProduct };
       setProducts(newProducts);
-      
-      // 🆕 SALVAR NO FIREBASE: usar apenas saveProductToFirebase que já remove e recria as locations
       if (editingPosition && currentShelf) {
-        await saveProductToFirebase(
-          currentShelf.id,
-          editingPosition.row,
-          editingPosition.col,
-          editingProduct
-        );
+        await saveProductToFirebase(currentShelf.id, editingPosition.row, editingPosition.col, updatedProduct);
       }
       
       // 🆕 AGUARDAR LISTENERS ATUALIZAREM, DEPOIS SINCRONIZAR
@@ -2475,23 +2466,36 @@ const saveProduct = async () => {
         
       }
       
-      // Sincronizar cores removidas
-      // Sincronizar cores removidas (usando for...of para permitir await)
       if (oldProduct && oldProduct.colors) {
         for (const oldColor of oldProduct.colors) {
           const stillExists = validColors.some(newColor => newColor.code === oldColor.code);
           if (!stillExists) {
-            // Se a cor foi removida localmente, confirmar no backend e enviar resultado
             try {
               await new Promise(resolve => setTimeout(resolve, 800));
               const backendSnapshot = await fetchLocationsFromFirebase(updatedProduct.sku, oldColor.code);
               const lastUpdaterId = backendSnapshot?.lastUpdatedBy;
               const lastUpdaterName = lastUpdaterId ? await resolveUserDisplayName(lastUpdaterId) : null;
               await enqueueSheetSync(updatedProduct.sku, oldColor.code, backendSnapshot, lastUpdaterName || (user?.name || null));
-            } catch (syncErr) {
-              console.warn('⚠️ Erro ao sincronizar remoção de cor:', syncErr);
-            }
+            } catch (syncErr) {}
           }
+        }
+      }
+    } else {
+      const newProducts = { ...(products || {}) };
+      delete newProducts[editingPosition.key];
+      setProducts(newProducts);
+      if (editingPosition && currentShelf) {
+        await saveProductToFirebase(currentShelf.id, editingPosition.row, editingPosition.col, { sku: '', colors: [] });
+      }
+      if (oldProduct && oldProduct.colors) {
+        await new Promise(resolve => setTimeout(resolve, 800));
+        for (const oldColor of oldProduct.colors) {
+          try {
+            const backendSnapshot = await fetchLocationsFromFirebase(oldProduct.sku, oldColor.code);
+            const lastUpdaterId = backendSnapshot?.lastUpdatedBy;
+            const lastUpdaterName = lastUpdaterId ? await resolveUserDisplayName(lastUpdaterId) : null;
+            await enqueueSheetSync(oldProduct.sku, oldColor.code, backendSnapshot, lastUpdaterName || (user?.name || null));
+          } catch (syncErr) {}
         }
       }
     }
