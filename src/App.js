@@ -195,6 +195,10 @@ const StockControlApp = () => {
   // Estados para sistema de backup
   const [showBackupModal, setShowBackupModal] = useState(false);
   const [importData, setImportData] = useState('');
+  const [importDryRun, setImportDryRun] = useState(true);
+  const [importMode, setImportMode] = useState('replace');
+  const [importSummary, setImportSummary] = useState(null);
+  const [isImporting, setIsImporting] = useState(false);
 
   // Estados para Google Sheets
   const [showSheetsModal, setShowSheetsModal] = useState(false);
@@ -1130,6 +1134,116 @@ const computeTotalsFromFirebase = async () => {
       
     } catch (error) {
       alert('Erro ao processar backup: ' + error.message);
+    }
+  };
+
+  const validateBackupData = (raw) => {
+    const data = raw && raw.data ? raw.data : {};
+    const shelvesRaw = data.shelves || [];
+    const shelvesList = Array.isArray(shelvesRaw) ? shelvesRaw : Object.values(shelvesRaw);
+    const productsObj = data.products || {};
+    return { shelvesList, productsObj };
+  };
+
+  const buildImportSummary = ({ shelvesList, productsObj }) => {
+    const shelvesCount = Array.isArray(shelvesList) ? shelvesList.length : 0;
+    let productPositions = 0;
+    let locationRecords = 0;
+    let totalQuantity = 0;
+    const skuSet = new Set();
+    const colorSet = new Set();
+    Object.entries(productsObj || {}).forEach(([key, prod]) => {
+      productPositions += 1;
+      if (prod && prod.sku) skuSet.add(String(prod.sku).trim());
+      const colors = Array.isArray(prod?.colors) ? prod.colors : [];
+      colors.forEach(c => {
+        colorSet.add(String(c.code || '').trim());
+        locationRecords += 1;
+        totalQuantity += Number(c.quantity) || 0;
+      });
+    });
+    return { shelvesCount, productPositions, locationRecords, totalQuantity, uniqueSkus: skuSet.size, uniqueColors: colorSet.size };
+  };
+
+  const applyBackupToFirebase = async ({ shelvesList, productsObj }, { mode = 'replace', batchSize = 200 } = {}) => {
+    setIsImporting(true);
+    try {
+      if (mode === 'replace') {
+        await set(ref(database, 'shelves'), null);
+        await set(ref(database, 'locations'), null);
+      }
+
+      const shelvesById = {};
+      for (const shelf of shelvesList) {
+        if (!shelf || typeof shelf.id === 'undefined') continue;
+        shelvesById[shelf.id] = shelf;
+        await set(ref(database, `shelves/${shelf.id}`), shelf);
+      }
+
+      let writes = 0;
+      for (const [key, prod] of Object.entries(productsObj || {})) {
+        const parts = String(key).split('-');
+        const shelfId = Number(parts[0]);
+        const row = Number(parts[1]);
+        const col = Number(parts[2]);
+        if (!shelfId && shelfId !== 0) continue;
+        const shelf = shelvesById[shelfId] || shelves.find(s => s.id === shelfId);
+        const colors = Array.isArray(prod?.colors) ? prod.colors : [];
+        for (const color of colors) {
+          const locationId = `loc_${shelfId}_${row}_${col}_${String(color.code)}`;
+          const locationData = {
+            sku: prod.sku,
+            color: color.code,
+            quantity: color.quantity,
+            unit: prod.unit || 'unidades',
+            shelf: {
+              id: shelfId,
+              name: shelf?.name || '',
+              corridor: shelf?.corridor || (shelf?.name ? shelf.name[0] : '')
+            },
+            position: {
+              row,
+              col,
+              label: shelf ? `L${shelf.rows - row}:C${col + 1}` : `L${row}:C${col + 1}`
+            },
+            metadata: {
+              created_at: Date.now(),
+              updated_at: Date.now(),
+              created_by: 'Importação',
+              updated_by: 'Importação'
+            }
+          };
+          await set(ref(database, `locations/${locationId}`), locationData);
+          writes += 1;
+          if (writes % batchSize === 0) {
+            await new Promise(r => setTimeout(r, 20));
+          }
+        }
+      }
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
+  const runImportBackup = async (applyToFirebase = false) => {
+    try {
+      const raw = JSON.parse(importData);
+      const normalized = validateBackupData(raw);
+      const summary = buildImportSummary(normalized);
+      setImportSummary(summary);
+      if (!applyToFirebase) {
+        alert('Simulação concluída. Veja o resumo abaixo.');
+        return;
+      }
+      const confirmText = importMode === 'replace' ? 'Isto irá substituir os dados atuais no Firebase. Deseja continuar?' : 'Isto irá mesclar com os dados atuais no Firebase. Deseja continuar?';
+      const ok = window.confirm(confirmText);
+      if (!ok) return;
+      await applyBackupToFirebase(normalized, { mode: importMode });
+      alert('Importação aplicada ao Firebase com sucesso.');
+      setShowBackupModal(false);
+      setImportData('');
+    } catch (e) {
+      alert('Erro ao importar backup: ' + e.message);
     }
   };
 
@@ -4598,13 +4712,56 @@ const saveProduct = async () => {
                           placeholder="Cole o conteúdo do backup aqui..."
                           className="w-full p-3 border border-gray-300 rounded-lg text-sm h-24 resize-none"
                         />
+                        <div className="mt-3 space-y-2">
+                          <label className="flex items-center gap-2 text-sm">
+                            <input
+                              type="checkbox"
+                              checked={importDryRun}
+                              onChange={(e) => setImportDryRun(e.target.checked)}
+                            />
+                            Simular antes de aplicar (Dry-Run)
+                          </label>
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm text-gray-700">Modo:</span>
+                            <select
+                              className="flex-1 p-2 border border-gray-300 rounded-lg text-sm"
+                              value={importMode}
+                              onChange={(e) => setImportMode(e.target.value)}
+                            >
+                              <option value="replace">Substituir</option>
+                              <option value="merge">Mesclar</option>
+                            </select>
+                          </div>
+                        </div>
+                        {importSummary && (
+                          <div className="mt-3 bg-gray-50 border border-gray-200 rounded-lg p-3 text-sm">
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>Prateleiras: <strong>{importSummary.shelvesCount}</strong></div>
+                              <div>Posições: <strong>{importSummary.productPositions}</strong></div>
+                              <div>Registros: <strong>{importSummary.locationRecords}</strong></div>
+                              <div>Quantidade total: <strong>{importSummary.totalQuantity}</strong></div>
+                              <div>SKUs únicos: <strong>{importSummary.uniqueSkus}</strong></div>
+                              <div>Cores únicas: <strong>{importSummary.uniqueColors}</strong></div>
+                            </div>
+                          </div>
+                        )}
                         <button
-                          onClick={importBackup}
+                          onClick={() => runImportBackup(importDryRun ? false : true)}
                           className="w-full mt-2 flex items-center justify-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
                         >
                           <Settings className="w-4 h-4" />
-                          Restaurar Backup
+                          {importDryRun ? 'Simular Importação' : (isImporting ? 'Aplicando...' : 'Aplicar no Firebase')}
                         </button>
+                        {!importDryRun && (
+                          <button
+                            onClick={() => runImportBackup(true)}
+                            disabled={isImporting}
+                            className="w-full mt-2 flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+                          >
+                            <Save className="w-4 h-4" />
+                            {isImporting ? 'Processando...' : 'Confirmar Importação'}
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>
