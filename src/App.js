@@ -996,7 +996,7 @@ const computeTotalsFromFirebase = async () => {
     const now = Date.now();
     if (now - (lastSummarySentRef.current || 0) < 30000) return;
     lastSummarySentRef.current = now;
-    await new Promise(resolve => setTimeout(resolve, 1200));
+    await new Promise(resolve => setTimeout(resolve, 2000));
     const totals = await computeTotalsFromFirebase();
     const params = new URLSearchParams({
       callback: 'handleSyncResponse',

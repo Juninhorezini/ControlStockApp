@@ -294,10 +294,10 @@ function ensureTotalsBlock(sheet) {
   var c3 = sheet.getRange(3, 3);
   var c4 = sheet.getRange(4, 3);
   var c5 = sheet.getRange(5, 3);
-  if (!c2.getFormula()) c2.setFormula('=COUNTA(UNIQUE(FILTER(C11:C, C11:C<>"")))');
+  if (!c2.getFormula()) c2.setFormula('=COUNTA(UNIQUE(FILTER(C11:C; C11:C<>"")))');
   if (!c3.getFormula()) c3.setFormula('=SUM(E11:E)');
-  if (!c4.getFormula()) c4.setFormula('=COUNTA(UNIQUE(FILTER(D11:D, D11:D<>"")))');
-  if (!c5.getFormula()) c5.setFormula('=COUNTA(UNIQUE(FILTER(F11:F, F11:F<>"")))');
+  if (!c4.getFormula()) c4.setFormula('=COUNTA(UNIQUE(FILTER(D11:D; D11:D<>"")))');
+  if (!c5.getFormula()) c5.setFormula('=COUNTA(UNIQUE(FILTER(F11:F; F11:F<>"")))');
   try {
     var ranges = ss.getNamedRanges();
     var existing = null;
