@@ -1642,17 +1642,24 @@ const computeTotalsFromFirebase = async () => {
           try {
             const locSku = loc.sku;
             const locColor = loc.color;
+            const shelfObj = loc.shelf || {};
+            const pos = loc.position || {};
+            const singleSnapshot = {
+              totalQuantity: Number(loc.quantity) || 0,
+              localizacoes: [{
+                corredor: shelfObj.corridor || (shelfObj.name ? shelfObj.name.charAt(0) : ''),
+                prateleira: shelfObj.name || '',
+                localizacao: (typeof shelfObj.rows === 'number' && typeof pos.row === 'number' && typeof pos.col === 'number')
+                  ? `L${shelfObj.rows - pos.row}:C${pos.col + 1}`
+                  : '',
+                quantidade: Number(loc.quantity) || 0
+              }],
+              lastUpdatedBy: loc.metadata?.updated_by || null
+            };
             const updatedByRaw = loc.metadata?.updated_by;
             const updatedBy = (typeof updatedByRaw === 'string') ? updatedByRaw : (updatedByRaw?.displayName || (updatedByRaw?.uid ? userNames?.[updatedByRaw.uid] : null));
             if (updatedBy && updatedBy === user.name) {
-              (async () => {
-                await new Promise(resolve => setTimeout(resolve, 1200));
-                const backendSnapshot = await fetchLocationsFromFirebase(locSku, locColor);
-                const lastUpdaterId = backendSnapshot?.lastUpdatedBy;
-                const lastUpdaterName = lastUpdaterId ? (userNames?.[lastUpdaterId] || lastUpdaterId) : null;
-                enqueueSheetSync(locSku, locColor, backendSnapshot, lastUpdaterName);
-                sendSummaryTotalsDebounced();
-              })();
+              enqueueSheetSync(locSku, locColor, singleSnapshot, updatedBy);
             }
             sendSummaryTotalsDebounced();
           } catch (err) {
@@ -1688,17 +1695,24 @@ const computeTotalsFromFirebase = async () => {
           try {
             const locSku = loc.sku;
             const locColor = loc.color;
+            const shelfObj = loc.shelf || {};
+            const pos = loc.position || {};
+            const singleSnapshot = {
+              totalQuantity: Number(loc.quantity) || 0,
+              localizacoes: [{
+                corredor: shelfObj.corridor || (shelfObj.name ? shelfObj.name.charAt(0) : ''),
+                prateleira: shelfObj.name || '',
+                localizacao: (typeof shelfObj.rows === 'number' && typeof pos.row === 'number' && typeof pos.col === 'number')
+                  ? `L${shelfObj.rows - pos.row}:C${pos.col + 1}`
+                  : '',
+                quantidade: Number(loc.quantity) || 0
+              }],
+              lastUpdatedBy: loc.metadata?.updated_by || null
+            };
             const updatedByRaw = loc.metadata?.updated_by;
             const updatedBy = (typeof updatedByRaw === 'string') ? updatedByRaw : (updatedByRaw?.displayName || (updatedByRaw?.uid ? userNames?.[updatedByRaw.uid] : null));
             if (updatedBy && updatedBy === user.name) {
-              (async () => {
-                await new Promise(resolve => setTimeout(resolve, 1200));
-                const backendSnapshot = await fetchLocationsFromFirebase(locSku, locColor);
-                const lastUpdaterId = backendSnapshot?.lastUpdatedBy;
-                const lastUpdaterName = lastUpdaterId ? (userNames?.[lastUpdaterId] || lastUpdaterId) : null;
-                enqueueSheetSync(locSku, locColor, backendSnapshot, lastUpdaterName);
-                sendSummaryTotalsDebounced();
-              })();
+              enqueueSheetSync(locSku, locColor, singleSnapshot, updatedBy);
             }
             sendSummaryTotalsDebounced();
           } catch (err) {
@@ -1734,10 +1748,25 @@ const computeTotalsFromFirebase = async () => {
               await new Promise(resolve => setTimeout(resolve, 600));
               const locSku = loc.sku;
               const locColor = loc.color;
-              const backendSnapshot = await fetchLocationsFromFirebase(locSku, locColor);
-              const lastUpdaterId = backendSnapshot?.lastUpdatedBy;
-              const lastUpdaterName = lastUpdaterId ? await resolveUserDisplayName(lastUpdaterId) : null;
-              await enqueueSheetSync(locSku, locColor, backendSnapshot, lastUpdaterName || (user?.name || null));
+              const shelfObj = loc.shelf || {};
+              const pos = loc.position || {};
+              const singleSnapshot = {
+                totalQuantity: 0,
+                localizacoes: [{
+                  corredor: shelfObj.corridor || (shelfObj.name ? shelfObj.name.charAt(0) : ''),
+                  prateleira: shelfObj.name || '',
+                  localizacao: (typeof shelfObj.rows === 'number' && typeof pos.row === 'number' && typeof pos.col === 'number')
+                    ? `L${shelfObj.rows - pos.row}:C${pos.col + 1}`
+                    : '',
+                  quantidade: 0
+                }],
+                lastUpdatedBy: loc.metadata?.updated_by || null
+              };
+              const updatedByRaw = loc.metadata?.updated_by;
+              const updatedBy = (typeof updatedByRaw === 'string') ? updatedByRaw : (updatedByRaw?.displayName || (updatedByRaw?.uid ? userNames?.[updatedByRaw.uid] : null));
+              if (updatedBy && updatedBy === user.name) {
+                await enqueueSheetSync(locSku, locColor, singleSnapshot, updatedBy);
+              }
             } catch (err) {
               console.error('❌ Erro ao sincronizar após remoção:', err);
             } finally {
