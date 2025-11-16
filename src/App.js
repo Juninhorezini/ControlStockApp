@@ -2445,7 +2445,17 @@ const saveProduct = async () => {
       }
     }
   } else {
-    const validColors = (editingProduct.colors || []).filter(color => color.code && color.code.trim() !== '' && Number(color.quantity) > 0);
+    const previousColors = (oldProduct?.colors || []);
+    const incomingColors = (editingProduct.colors || []);
+    const byCode = {};
+    for (const c of previousColors) {
+      if (c && c.code) byCode[String(c.code)] = { code: c.code, quantity: Number(c.quantity) || 0 };
+    }
+    for (const c of incomingColors) {
+      if (c && c.code) byCode[String(c.code)] = { code: c.code, quantity: Number(c.quantity) || 0 };
+    }
+    const mergedColors = Object.values(byCode);
+    const validColors = mergedColors.filter(c => Number(c.quantity) > 0);
     if (validColors.length > 0) {
       const updatedProduct = {
         ...editingProduct,
