@@ -711,6 +711,10 @@ const syncSingleProductWithSheets = async (sku, color = '', productsSnapshot = n
 
       const lastLocation = lastLocOverride || (localizacoesArray[localizacoesArray.length - 1] || {});
 
+      if (lastLocOverride) {
+        localizacoesArray = [lastLocOverride];
+      }
+
       // JSONP request via script tag
       // Debug: log payload summary to ensure localizacoes is present
       try {
@@ -1649,13 +1653,14 @@ const computeTotalsFromFirebase = async () => {
                 const backendSnapshot = await fetchLocationsFromFirebase(locSku, locColor);
                 const shelfObj = loc.shelf || {};
                 const pos = loc.position || {};
-                const lastLocOverride = {
-                  corredor: shelfObj.corridor || (shelfObj.name ? shelfObj.name.charAt(0) : ''),
-                  prateleira: shelfObj.name || '',
-                  localizacao: (typeof shelfObj.rows === 'number' && typeof pos.row === 'number' && typeof pos.col === 'number')
-                    ? `L${shelfObj.rows - pos.row}:C${pos.col + 1}`
-                    : ''
-                };
+              const lastLocOverride = {
+                corredor: shelfObj.corridor || (shelfObj.name ? shelfObj.name.charAt(0) : ''),
+                prateleira: shelfObj.name || '',
+                localizacao: (typeof shelfObj.rows === 'number' && typeof pos.row === 'number' && typeof pos.col === 'number')
+                  ? `L${shelfObj.rows - pos.row}:C${pos.col + 1}`
+                  : '',
+                quantidade: Number(loc.quantity) || 0
+              };
                 enqueueSheetSync(locSku, locColor, backendSnapshot, updatedBy, lastLocOverride);
               })();
             }
@@ -1700,13 +1705,14 @@ const computeTotalsFromFirebase = async () => {
                 const backendSnapshot = await fetchLocationsFromFirebase(locSku, locColor);
                 const shelfObj = loc.shelf || {};
                 const pos = loc.position || {};
-                const lastLocOverride = {
-                  corredor: shelfObj.corridor || (shelfObj.name ? shelfObj.name.charAt(0) : ''),
-                  prateleira: shelfObj.name || '',
-                  localizacao: (typeof shelfObj.rows === 'number' && typeof pos.row === 'number' && typeof pos.col === 'number')
-                    ? `L${shelfObj.rows - pos.row}:C${pos.col + 1}`
-                    : ''
-                };
+              const lastLocOverride = {
+                corredor: shelfObj.corridor || (shelfObj.name ? shelfObj.name.charAt(0) : ''),
+                prateleira: shelfObj.name || '',
+                localizacao: (typeof shelfObj.rows === 'number' && typeof pos.row === 'number' && typeof pos.col === 'number')
+                  ? `L${shelfObj.rows - pos.row}:C${pos.col + 1}`
+                  : '',
+                quantidade: Number(loc.quantity) || 0
+              };
                 enqueueSheetSync(locSku, locColor, backendSnapshot, updatedBy, lastLocOverride);
               })();
             }
@@ -1755,7 +1761,8 @@ const computeTotalsFromFirebase = async () => {
                   prateleira: shelfObj.name || '',
                   localizacao: (typeof shelfObj.rows === 'number' && typeof pos.row === 'number' && typeof pos.col === 'number')
                     ? `L${shelfObj.rows - pos.row}:C${pos.col + 1}`
-                    : ''
+                    : '',
+                  quantidade: 0
                 };
                 await enqueueSheetSync(locSku, locColor, backendSnapshot, updatedBy, lastLocOverride);
               }
