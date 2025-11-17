@@ -212,8 +212,9 @@ const StockControlApp = () => {
   const [syncStatus, setSyncStatus] = useState('');
 
   const lastSheetSyncRef = useRef({});
+  const lastLocationQuantitiesRef = useRef({});
 
-const enqueueSheetSync = async (sku, color, snapshot, lastUpdaterName, lastLocOverride = null) => {
+const enqueueSheetSync = async (sku, color, snapshot, lastUpdaterName, lastLocOverride = null, historyAction = null, prevQty = null, newQty = null) => {
     try {
       const key = `${String(sku).trim()}-${String(color).trim()}`;
       const now = Date.now();
@@ -222,7 +223,7 @@ const enqueueSheetSync = async (sku, color, snapshot, lastUpdaterName, lastLocOv
         return;
       }
       lastSheetSyncRef.current[key] = now;
-      await syncSingleProductWithSheets(sku, color, snapshot, lastUpdaterName, lastLocOverride);
+      await syncSingleProductWithSheets(sku, color, snapshot, lastUpdaterName, lastLocOverride, historyAction, prevQty, newQty);
     } catch (e) {}
   };
 
@@ -662,7 +663,7 @@ const processSyncQueue = async () => {
 
 // VERSÃO CORRIGIDA: Agora lê direto do estado products (não do localStorage)
 // Agora aceita opcionalmente um snapshot de products para evitar ler estado global
-const syncSingleProductWithSheets = async (sku, color = '', productsSnapshot = null, usuarioName = null, lastLocOverride = null) => {
+const syncSingleProductWithSheets = async (sku, color = '', productsSnapshot = null, usuarioName = null, lastLocOverride = null, historyAction = null, prevQty = null, newQty = null) => {
   if (!sheetsUrl) return;
 
   syncQueue.push(async () => {
@@ -750,7 +751,13 @@ const syncSingleProductWithSheets = async (sku, color = '', productsSnapshot = n
         corredor: lastLocation.corredor || '',
         prateleira: lastLocation.prateleira || '',
         localizacao: lastLocation.localizacao || '',
-        localizacoes: JSON.stringify(localizacoesArray)
+        localizacoes: JSON.stringify(localizacoesArray),
+        action: historyAction || '',
+        acao: historyAction || '',
+        from: (prevQty ?? '').toString(),
+        to: (newQty ?? '').toString(),
+        qtdAnterior: (prevQty ?? '').toString(),
+        qtdAtual: (newQty ?? '').toString()
       });
 
       try {
@@ -1653,15 +1660,19 @@ const computeTotalsFromFirebase = async () => {
                 const backendSnapshot = await fetchLocationsFromFirebase(locSku, locColor);
                 const shelfObj = loc.shelf || {};
                 const pos = loc.position || {};
-              const lastLocOverride = {
-                corredor: shelfObj.corridor || (shelfObj.name ? shelfObj.name.charAt(0) : ''),
-                prateleira: shelfObj.name || '',
-                localizacao: (typeof shelfObj.rows === 'number' && typeof pos.row === 'number' && typeof pos.col === 'number')
-                  ? `L${shelfObj.rows - pos.row}:C${pos.col + 1}`
-                  : '',
-                quantidade: Number(loc.quantity) || 0
-              };
-                enqueueSheetSync(locSku, locColor, backendSnapshot, updatedBy, lastLocOverride);
+                const lastLocOverride = {
+                  corredor: shelfObj.corridor || (shelfObj.name ? shelfObj.name.charAt(0) : ''),
+                  prateleira: shelfObj.name || '',
+                  localizacao: (pos?.label) || ((typeof shelfObj.rows === 'number' && typeof pos.row === 'number' && typeof pos.col === 'number')
+                    ? `L${shelfObj.rows - pos.row}:C${pos.col + 1}`
+                    : ''),
+                  quantidade: Number(loc.quantity) || 0
+                };
+                const locId = snapshot.key;
+                const prevQty = 0;
+                const newQty = Number(loc.quantity) || 0;
+                lastLocationQuantitiesRef.current[locId] = newQty;
+                enqueueSheetSync(locSku, locColor, backendSnapshot, updatedBy, lastLocOverride, 'adicionar', prevQty, newQty);
               })();
             }
             sendSummaryTotalsDebounced();
@@ -1705,15 +1716,19 @@ const computeTotalsFromFirebase = async () => {
                 const backendSnapshot = await fetchLocationsFromFirebase(locSku, locColor);
                 const shelfObj = loc.shelf || {};
                 const pos = loc.position || {};
-              const lastLocOverride = {
-                corredor: shelfObj.corridor || (shelfObj.name ? shelfObj.name.charAt(0) : ''),
-                prateleira: shelfObj.name || '',
-                localizacao: (typeof shelfObj.rows === 'number' && typeof pos.row === 'number' && typeof pos.col === 'number')
-                  ? `L${shelfObj.rows - pos.row}:C${pos.col + 1}`
-                  : '',
-                quantidade: Number(loc.quantity) || 0
-              };
-                enqueueSheetSync(locSku, locColor, backendSnapshot, updatedBy, lastLocOverride);
+                const lastLocOverride = {
+                  corredor: shelfObj.corridor || (shelfObj.name ? shelfObj.name.charAt(0) : ''),
+                  prateleira: shelfObj.name || '',
+                  localizacao: (pos?.label) || ((typeof shelfObj.rows === 'number' && typeof pos.row === 'number' && typeof pos.col === 'number')
+                    ? `L${shelfObj.rows - pos.row}:C${pos.col + 1}`
+                    : ''),
+                  quantidade: Number(loc.quantity) || 0
+                };
+                const locId = snapshot.key;
+                const prevQty = lastLocationQuantitiesRef.current[locId] ?? (Number(loc.quantity) || 0);
+                const newQty = Number(loc.quantity) || 0;
+                lastLocationQuantitiesRef.current[locId] = newQty;
+                enqueueSheetSync(locSku, locColor, backendSnapshot, updatedBy, lastLocOverride, 'atualizar', prevQty, newQty);
               })();
             }
             sendSummaryTotalsDebounced();
@@ -1759,12 +1774,15 @@ const computeTotalsFromFirebase = async () => {
                 const lastLocOverride = {
                   corredor: shelfObj.corridor || (shelfObj.name ? shelfObj.name.charAt(0) : ''),
                   prateleira: shelfObj.name || '',
-                  localizacao: (typeof shelfObj.rows === 'number' && typeof pos.row === 'number' && typeof pos.col === 'number')
+                  localizacao: (pos?.label) || ((typeof shelfObj.rows === 'number' && typeof pos.row === 'number' && typeof pos.col === 'number')
                     ? `L${shelfObj.rows - pos.row}:C${pos.col + 1}`
-                    : '',
+                    : ''),
                   quantidade: 0
                 };
-                await enqueueSheetSync(locSku, locColor, backendSnapshot, updatedBy, lastLocOverride);
+                const locId = snapshot.key;
+                const prevQty = lastLocationQuantitiesRef.current[locId] ?? (Number(loc.quantity) || 0);
+                delete lastLocationQuantitiesRef.current[locId];
+                await enqueueSheetSync(locSku, locColor, backendSnapshot, updatedBy, lastLocOverride, 'remover', prevQty, 0);
               }
             } catch (err) {
               console.error('❌ Erro ao sincronizar após remoção:', err);
