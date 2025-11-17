@@ -2464,20 +2464,7 @@ const saveProduct = async () => {
       );
     }
     
-    // 🆕 Sync APÓS Firebase confirmar (usar snapshot local para garantir dado atual)
-    if (sheetsUrl && oldProduct && oldProduct.colors) {
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      for (const color of oldProduct.colors) {
-        try {
-          const backendSnapshot = await fetchLocationsFromFirebase(oldProduct.sku, color.code);
-          const lastUpdaterId = backendSnapshot?.lastUpdatedBy;
-          const lastUpdaterName = lastUpdaterId ? await resolveUserDisplayName(lastUpdaterId) : null;
-          await enqueueSheetSync(oldProduct.sku, color.code, backendSnapshot, lastUpdaterName || (user?.name || null));
-        } catch (syncErr) {
-          console.warn('⚠️ Erro ao sincronizar Sheets após remover produto:', syncErr);
-        }
-      }
-    }
+    // Sync será disparado pelos listeners de Firebase
   } else {
     const previousColors = (oldProduct?.colors || []);
     const incomingColors = (editingProduct.colors || []);
@@ -2497,27 +2484,9 @@ const saveProduct = async () => {
         await saveProductToFirebase(currentShelf.id, editingPosition.row, editingPosition.col, updatedProduct);
       }
       
-      // 🆕 AGUARDAR LISTENERS ATUALIZAREM, DEPOIS SINCRONIZAR
-      if (sheetsUrl) {
-        await new Promise(resolve => setTimeout(resolve, 1000));  // Aguardar Firebase listeners
-        // Para garantir consistência do backend, buscar as locations atuais do Firebase antes de sincronizar
-        
-      }
+      // Sync será disparado pelos listeners de Firebase
       
-      if (oldProduct && oldProduct.colors) {
-        for (const oldColor of oldProduct.colors) {
-          const stillExists = validColors.some(newColor => newColor.code === oldColor.code);
-          if (!stillExists) {
-            try {
-              await new Promise(resolve => setTimeout(resolve, 800));
-              const backendSnapshot = await fetchLocationsFromFirebase(updatedProduct.sku, oldColor.code);
-              const lastUpdaterId = backendSnapshot?.lastUpdatedBy;
-              const lastUpdaterName = lastUpdaterId ? await resolveUserDisplayName(lastUpdaterId) : null;
-              await enqueueSheetSync(updatedProduct.sku, oldColor.code, backendSnapshot, lastUpdaterName || (user?.name || null));
-            } catch (syncErr) {}
-          }
-        }
-      }
+      // Remoções serão sincronizadas via onChildRemoved
     } else {
       const newProducts = { ...(products || {}) };
       delete newProducts[editingPosition.key];
@@ -2525,17 +2494,7 @@ const saveProduct = async () => {
       if (editingPosition && currentShelf) {
         await saveProductToFirebase(currentShelf.id, editingPosition.row, editingPosition.col, { sku: '', colors: [] });
       }
-      if (oldProduct && oldProduct.colors) {
-        await new Promise(resolve => setTimeout(resolve, 800));
-        for (const oldColor of oldProduct.colors) {
-          try {
-            const backendSnapshot = await fetchLocationsFromFirebase(oldProduct.sku, oldColor.code);
-            const lastUpdaterId = backendSnapshot?.lastUpdatedBy;
-            const lastUpdaterName = lastUpdaterId ? await resolveUserDisplayName(lastUpdaterId) : null;
-            await enqueueSheetSync(oldProduct.sku, oldColor.code, backendSnapshot, lastUpdaterName || (user?.name || null));
-          } catch (syncErr) {}
-        }
-      }
+      // Remoções serão sincronizadas via onChildRemoved
     }
   }
   
