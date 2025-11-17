@@ -2383,9 +2383,16 @@ const saveProductToFirebase = async (shelfId, row, col, productData) => {
         }
       }
 
-      // Upsert cores desejadas
+      // Upsert apenas cores novas ou com quantidade alterada
       for (const entry of Object.values(desired)) {
-        updates[`locations/${entry.id}`] = entry.data;
+        const existing = allLocs[entry.id];
+        const existingQty = existing ? Number(existing.quantity) : null;
+        const desiredQty = Number(entry.data.quantity);
+        const isNew = !existing;
+        const changed = isNew || existingQty !== desiredQty;
+        if (changed) {
+          updates[`locations/${entry.id}`] = entry.data;
+        }
       }
 
       await update(ref(database), updates);
