@@ -1585,6 +1585,7 @@ const computeTotalsFromFirebase = async () => {
         const prods = {};
 
         Object.entries(locs).forEach(([id, loc]) => {
+          lastLocationQuantitiesRef.current[id] = Number(loc.quantity) || 0;
           const key = loc.shelf.id + '-' + loc.position.row + '-' + loc.position.col;
           if (!prods[key]) {
             prods[key] = { 
@@ -1686,6 +1687,9 @@ const computeTotalsFromFirebase = async () => {
         const loc = snapshot.val();
         console.log('✏️ Child changed detectado:', snapshot.key);
         const key = loc.shelf.id + '-' + loc.position.row + '-' + loc.position.col;
+        const prevProduct = products ? products[key] : null;
+        const prevColorEntry = prevProduct ? (prevProduct.colors || []).find(c => c.code === loc.color) : null;
+        const prevQtyState = prevColorEntry ? Number(prevColorEntry.quantity) || 0 : 0;
 
         setProducts(prev => {
           const newProds = { ...prev };
@@ -1725,7 +1729,7 @@ const computeTotalsFromFirebase = async () => {
                   quantidade: Number(loc.quantity) || 0
                 };
                 const locId = snapshot.key;
-                const prevQty = lastLocationQuantitiesRef.current[locId] ?? (Number(loc.quantity) || 0);
+                const prevQty = lastLocationQuantitiesRef.current[locId] ?? prevQtyState;
                 const newQty = Number(loc.quantity) || 0;
                 lastLocationQuantitiesRef.current[locId] = newQty;
                 enqueueSheetSync(locSku, locColor, backendSnapshot, updatedBy, lastLocOverride, 'atualizar', prevQty, newQty);
@@ -1746,6 +1750,9 @@ const computeTotalsFromFirebase = async () => {
 
         const loc = snapshot.val();
         const key = loc.shelf.id + '-' + loc.position.row + '-' + loc.position.col;
+        const prevProduct = products ? products[key] : null;
+        const prevColorEntry = prevProduct ? (prevProduct.colors || []).find(c => c.code === loc.color) : null;
+        const prevQtyState = prevColorEntry ? Number(prevColorEntry.quantity) || 0 : (Number(loc.quantity) || 0);
 
         setProducts(prev => {
           const newProds = { ...prev };
@@ -1780,7 +1787,7 @@ const computeTotalsFromFirebase = async () => {
                   quantidade: 0
                 };
                 const locId = snapshot.key;
-                const prevQty = lastLocationQuantitiesRef.current[locId] ?? (Number(loc.quantity) || 0);
+                const prevQty = lastLocationQuantitiesRef.current[locId] ?? prevQtyState;
                 delete lastLocationQuantitiesRef.current[locId];
                 await enqueueSheetSync(locSku, locColor, backendSnapshot, updatedBy, lastLocOverride, 'remover', prevQty, 0);
               }
