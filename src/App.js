@@ -1757,6 +1757,7 @@ const computeTotalsFromFirebase = async () => {
                 const locId = snapshot.key;
                 const prevQty = lastLocationQuantitiesRef.current[locId] ?? prevQtyState;
                 const newQty = Number(loc.quantity) || 0;
+                if (prevQty === newQty) return; // mudança só de metadata, não registrar histórico
                 lastLocationQuantitiesRef.current[locId] = newQty;
                 enqueueSheetSync(locSku, locColor, backendSnapshot, updatedBy, lastLocOverride, 'ATUALIZAR', prevQty, newQty);
               })();
@@ -2432,11 +2433,13 @@ const saveProductToFirebase = async (shelfId, row, col, productData) => {
       }
 
       const updates = {};
+      const removedLocIds = [];
       // Remover cores não desejadas
       for (const [locId, loc] of Object.entries(allLocs)) {
         if (loc.shelf.id === currentShelf.id && loc.position.row === row && loc.position.col === col) {
           if (!desired[loc.color]) {
             updates[`locations/${locId}`] = null;
+            removedLocIds.push(locId);
           }
         }
       }
@@ -2451,6 +2454,17 @@ const saveProductToFirebase = async (shelfId, row, col, productData) => {
         if (changed) {
           updates[`locations/${entry.id}`] = entry.data;
         }
+      }
+
+      // Atualizar metadados para remoções com o usuário atual antes de remover
+      for (const locId of removedLocIds) {
+        try {
+          await update(ref(database, `locations/${locId}/metadata`), {
+            updated_at: Date.now(),
+            updated_by: user.name,
+            removed_by: user.name
+          });
+        } catch (e) {}
       }
 
       await update(ref(database), updates);
