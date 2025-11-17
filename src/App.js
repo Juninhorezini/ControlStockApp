@@ -223,7 +223,31 @@ const enqueueSheetSync = async (sku, color, snapshot, lastUpdaterName, lastLocOv
         return;
       }
       lastSheetSyncRef.current[key] = now;
-      await syncSingleProductWithSheets(sku, color, snapshot, lastUpdaterName, lastLocOverride, historyAction, prevQty, newQty);
+      const actionUpper = historyAction ? String(historyAction).toUpperCase() : '';
+      const totalAtual = Number(snapshot?.totalQuantity || 0);
+      const prevQ = Number(prevQty || 0);
+      const newQ = Number(newQty || 0);
+      let totalAnterior = totalAtual;
+      if (actionUpper === 'ADICIONAR') {
+        totalAnterior = totalAtual - newQ;
+      } else if (actionUpper === 'ATUALIZAR') {
+        totalAnterior = totalAtual - newQ + prevQ;
+      } else if (actionUpper === 'REMOVER') {
+        totalAnterior = totalAtual + prevQ;
+      }
+
+      await syncSingleProductWithSheets(
+        sku,
+        color,
+        snapshot,
+        lastUpdaterName,
+        lastLocOverride,
+        actionUpper,
+        prevQ,
+        newQ,
+        totalAnterior,
+        totalAtual
+      );
     } catch (e) {}
   };
 
@@ -663,7 +687,7 @@ const processSyncQueue = async () => {
 
 // VERSÃO CORRIGIDA: Agora lê direto do estado products (não do localStorage)
 // Agora aceita opcionalmente um snapshot de products para evitar ler estado global
-const syncSingleProductWithSheets = async (sku, color = '', productsSnapshot = null, usuarioName = null, lastLocOverride = null, historyAction = null, prevQty = null, newQty = null) => {
+const syncSingleProductWithSheets = async (sku, color = '', productsSnapshot = null, usuarioName = null, lastLocOverride = null, historyAction = null, prevQty = null, newQty = null, prevTotal = null, newTotal = null) => {
   if (!sheetsUrl) return;
 
   syncQueue.push(async () => {
@@ -752,12 +776,14 @@ const syncSingleProductWithSheets = async (sku, color = '', productsSnapshot = n
         prateleira: lastLocation.prateleira || '',
         localizacao: lastLocation.localizacao || '',
         localizacoes: JSON.stringify(localizacoesArray),
-        action: historyAction || '',
-        acao: historyAction || '',
+        action: (historyAction || '').toString(),
+        acao: (historyAction || '').toString(),
         from: (prevQty ?? '').toString(),
         to: (newQty ?? '').toString(),
         qtdAnterior: (prevQty ?? '').toString(),
-        qtdAtual: (newQty ?? '').toString()
+        qtdAtual: (newQty ?? '').toString(),
+        totalAnterior: (prevTotal ?? totalQuantity).toString(),
+        totalAtual: (newTotal ?? totalQuantity).toString()
       });
 
       try {
@@ -1673,7 +1699,7 @@ const computeTotalsFromFirebase = async () => {
                 const prevQty = 0;
                 const newQty = Number(loc.quantity) || 0;
                 lastLocationQuantitiesRef.current[locId] = newQty;
-                enqueueSheetSync(locSku, locColor, backendSnapshot, updatedBy, lastLocOverride, 'adicionar', prevQty, newQty);
+                enqueueSheetSync(locSku, locColor, backendSnapshot, updatedBy, lastLocOverride, 'ADICIONAR', prevQty, newQty);
               })();
             }
             sendSummaryTotalsDebounced();
@@ -1732,7 +1758,7 @@ const computeTotalsFromFirebase = async () => {
                 const prevQty = lastLocationQuantitiesRef.current[locId] ?? prevQtyState;
                 const newQty = Number(loc.quantity) || 0;
                 lastLocationQuantitiesRef.current[locId] = newQty;
-                enqueueSheetSync(locSku, locColor, backendSnapshot, updatedBy, lastLocOverride, 'atualizar', prevQty, newQty);
+                enqueueSheetSync(locSku, locColor, backendSnapshot, updatedBy, lastLocOverride, 'ATUALIZAR', prevQty, newQty);
               })();
             }
             sendSummaryTotalsDebounced();
@@ -1789,7 +1815,7 @@ const computeTotalsFromFirebase = async () => {
                 const locId = snapshot.key;
                 const prevQty = lastLocationQuantitiesRef.current[locId] ?? prevQtyState;
                 delete lastLocationQuantitiesRef.current[locId];
-                await enqueueSheetSync(locSku, locColor, backendSnapshot, updatedBy, lastLocOverride, 'remover', prevQty, 0);
+                await enqueueSheetSync(locSku, locColor, backendSnapshot, updatedBy, lastLocOverride, 'REMOVER', prevQty, 0);
               }
             } catch (err) {
               console.error('❌ Erro ao sincronizar após remoção:', err);
