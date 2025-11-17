@@ -1799,9 +1799,9 @@ const computeTotalsFromFirebase = async () => {
               await new Promise(resolve => setTimeout(resolve, 600));
               const locSku = loc.sku;
               const locColor = loc.color;
-              const updatedByRaw = loc.metadata?.updated_by;
-              const updatedBy = (typeof updatedByRaw === 'string') ? updatedByRaw : (updatedByRaw?.displayName || (updatedByRaw?.uid ? userNames?.[updatedByRaw.uid] : null));
-              if (updatedBy && updatedBy === user.name) {
+              const removedByRaw = loc.metadata?.removed_by || loc.metadata?.updated_by;
+              const removedBy = (typeof removedByRaw === 'string') ? removedByRaw : (removedByRaw?.displayName || (removedByRaw?.uid ? userNames?.[removedByRaw.uid] : null));
+              if (removedBy && removedBy === user.name) {
                 const backendSnapshot = await fetchLocationsFromFirebase(locSku, locColor);
                 const shelfObj = loc.shelf || {};
                 const pos = loc.position || {};
