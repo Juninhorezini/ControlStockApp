@@ -85,6 +85,12 @@ function handleRequest(e) {
       }
     }
 
+    const acaoParam = (e.parameter.acao || e.parameter.action || '').toUpperCase();
+    const qtdAnteriorParam = parseInt(e.parameter.qtdAnterior || e.parameter.from) || 0;
+    const qtdAtualParam = parseInt(e.parameter.qtdAtual || e.parameter.to) || 0;
+    const totalAnteriorParam = parseInt(e.parameter.totalAnterior) || null;
+    const totalAtualParam = parseInt(e.parameter.totalAtual) || null;
+
     const data = {
       sku: e.parameter.sku || '',
       cor: e.parameter.cor || '',
@@ -98,7 +104,15 @@ function handleRequest(e) {
         localizacao: e.parameter.localizacao || ''
       },
       // ðŸ†• Todas as localizações (para aba Histórico - detalhado)
-      localizacoes: localizacoesArray
+      localizacoes: localizacoesArray,
+      // ðŸ†• Metadados da última alteração por localização (quando disponíveis)
+      ultimaAlteracao: {
+        acao: acaoParam || '',
+        qtdAnterior: qtdAnteriorParam,
+        qtdAtual: qtdAtualParam,
+        totalAnterior: totalAnteriorParam,
+        totalAtual: totalAtualParam
+      }
     };
 
     if (!data.sku) throw new Error('SKU não fornecido');
@@ -196,41 +210,50 @@ function updateProductComplete(prateleiraSheet, historicoSheet, data) {
   }
 
   // ============================================
-  // REGISTRAR NO HISTÃ“RICO (TODAS AS LOCALIZAÃ‡Ã•ES)
+  // REGISTRAR NO HISTÓRICO (DETALHES POR LOCALIZAÇÃO)
   // ============================================
 
+  var acaoHistoricoGlobal = acao; // padrão derivado do totalizador
+  var acaoUltima = (data.ultimaAlteracao && data.ultimaAlteracao.acao) ? String(data.ultimaAlteracao.acao).toUpperCase() : '';
+  var qtdAnteriorUltima = (data.ultimaAlteracao && (data.ultimaAlteracao.qtdAnterior || data.ultimaAlteracao.qtdAnterior === 0)) ? parseInt(data.ultimaAlteracao.qtdAnterior) : null;
+  var qtdAtualUltima = (data.ultimaAlteracao && (data.ultimaAlteracao.qtdAtual || data.ultimaAlteracao.qtdAtual === 0)) ? parseInt(data.ultimaAlteracao.qtdAtual) : null;
+
   if (localizacoes.length > 0) {
-    // Registrar cada localização separadamente no Histórico
+    var acaoParaHistorico = acaoUltima || acaoHistoricoGlobal;
+    var qtdAnteriorParaHistorico = (qtdAnteriorUltima != null) ? qtdAnteriorUltima : quantidadeAnterior;
     localizacoes.forEach(function(loc) {
+      var qtdNovaLoc = (qtdAtualUltima != null) ? qtdAtualUltima : (parseInt(loc.quantidade) || 0);
       historicoSheet.appendRow([
         dataHora,
         usuario,
-        acao,
+        acaoParaHistorico,
         sku,
         cor,
-        quantidadeAnterior,
-        parseInt(loc.quantidade) || 0,  // Quantidade especÃ­fica desta localização
+        qtdAnteriorParaHistorico,
+        qtdNovaLoc,
         loc.localizacao || '',
         loc.corredor || '',
         loc.prateleira || ''
       ]);
     });
-    Logger.log('ðŸ“ ' + localizacoes.length + ' entrada(s) registradas no Histórico');
+    Logger.log('📝 ' + localizacoes.length + ' entrada(s) registradas no Histórico (granular)');
   } else {
-    // Fallback: registrar entrada Ãºnica sem localização especÃ­fica
+    var acaoParaHistorico = acaoUltima || acaoHistoricoGlobal;
+    var qtdAnteriorParaHistorico = (qtdAnteriorUltima != null) ? qtdAnteriorUltima : quantidadeAnterior;
+    var qtdNovaLoc = (qtdAtualUltima != null) ? qtdAtualUltima : quantidadeTotal;
     historicoSheet.appendRow([
       dataHora,
       usuario,
-      acao,
+      acaoParaHistorico,
       sku,
       cor,
-      quantidadeAnterior,
-      quantidadeTotal,
+      qtdAnteriorParaHistorico,
+      qtdNovaLoc,
       ultimaLocalizacao.localizacao || '',
       ultimaLocalizacao.corredor || '',
       ultimaLocalizacao.prateleira || ''
     ]);
-    Logger.log('ðŸ“ 1 entrada no Histórico (sem array de localizações)');
+    Logger.log('📝 1 entrada no Histórico (fallback)');
   }
 
   return ContentService
