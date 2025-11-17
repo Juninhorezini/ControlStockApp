@@ -1815,7 +1815,7 @@ const computeTotalsFromFirebase = async () => {
                 const locId = snapshot.key;
                 const prevQty = lastLocationQuantitiesRef.current[locId] ?? prevQtyState;
                 delete lastLocationQuantitiesRef.current[locId];
-                await enqueueSheetSync(locSku, locColor, backendSnapshot, updatedBy, lastLocOverride, 'REMOVER', prevQty, 0);
+                await enqueueSheetSync(locSku, locColor, backendSnapshot, user.name, lastLocOverride, 'REMOVER', prevQty, 0);
               }
             } catch (err) {
               console.error('❌ Erro ao sincronizar após remoção:', err);
