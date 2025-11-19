@@ -213,6 +213,7 @@ const StockControlApp = () => {
 
   const lastSheetSyncRef = useRef({});
   const lastLocationQuantitiesRef = useRef({});
+  const moveTxnRef = useRef({});
 
 const enqueueSheetSync = async (sku, color, snapshot, lastUpdaterName, lastLocOverride = null, historyAction = null, prevQty = null, newQty = null) => {
     try {
@@ -1682,7 +1683,12 @@ const computeTotalsFromFirebase = async () => {
             const locColor = loc.color;
             const updatedByRaw = loc.metadata?.updated_by;
             const updatedBy = (typeof updatedByRaw === 'string') ? updatedByRaw : (updatedByRaw?.displayName || (updatedByRaw?.uid ? userNames?.[updatedByRaw.uid] : null));
-            if (updatedBy && updatedBy === user.name) {
+            const k = `${String(locSku).trim()}-${String(locColor).trim()}`;
+            const txn = moveTxnRef.current[k];
+            const isMoveAdd = txn && txn.to && txn.to.shelfId === (loc.shelf?.id) && txn.to.row === (loc.position?.row) && txn.to.col === (loc.position?.col) && (txn.expires || 0) > Date.now();
+            if (isMoveAdd) {
+              lastLocationQuantitiesRef.current[snapshot.key] = Number(loc.quantity) || 0;
+            } else if (updatedBy && updatedBy === user.name) {
               (async () => {
                 const backendSnapshot = await fetchLocationsFromFirebase(locSku, locColor);
                 const shelfObj = loc.shelf || {};
@@ -1801,7 +1807,24 @@ const computeTotalsFromFirebase = async () => {
               const locColor = loc.color;
               const removedByRaw = loc.metadata?.removed_by || loc.metadata?.updated_by;
               const removedBy = (typeof removedByRaw === 'string') ? removedByRaw : (removedByRaw?.displayName || (removedByRaw?.uid ? userNames?.[removedByRaw.uid] : null));
-              if (removedBy && removedBy === user.name) {
+              const k = `${String(locSku).trim()}-${String(locColor).trim()}`;
+              const txn = moveTxnRef.current[k];
+              const isMoveRemove = txn && txn.from && txn.from.shelfId === (loc.shelf?.id) && txn.from.row === (loc.position?.row) && txn.from.col === (loc.position?.col) && (txn.expires || 0) > Date.now();
+              if (isMoveRemove && removedBy && removedBy === user.name) {
+                const backendSnapshot = await fetchLocationsFromFirebase(locSku, locColor);
+                const destShelf = shelves.find(s => s.id === txn.to.shelfId) || {};
+                const lastLocOverride = {
+                  corredor: destShelf.corridor || (destShelf.name ? destShelf.name.charAt(0) : ''),
+                  prateleira: destShelf.name || '',
+                  localizacao: `L${(destShelf.rows || 0) - txn.to.row}:C${txn.to.col + 1}`,
+                  quantidade: Number(txn.qty) || 0
+                };
+                const locId = snapshot.key;
+                const prevQty = Number(txn.qty) || 0;
+                delete lastLocationQuantitiesRef.current[locId];
+                await enqueueSheetSync(locSku, locColor, backendSnapshot, user.name, lastLocOverride, 'ATUALIZAR', prevQty, prevQty);
+                delete moveTxnRef.current[k];
+              } else if (removedBy && removedBy === user.name) {
                 const backendSnapshot = await fetchLocationsFromFirebase(locSku, locColor);
                 const shelfObj = loc.shelf || {};
                 const pos = loc.position || {};
@@ -2691,6 +2714,20 @@ const saveProduct = async () => {
 
     // Atualizar backend: salvar nova location no destino e remover a antiga no source
     try {
+      // Registrar transação de movimento por SKU+cor
+      if (draggedProduct?.sku && Array.isArray(draggedProduct?.colors)) {
+        for (const c of draggedProduct.colors) {
+          if (!c || !c.code) continue;
+          const k = `${String(draggedProduct.sku).trim()}-${String(c.code).trim()}`;
+          moveTxnRef.current[k] = {
+            from: { shelfId: draggedPosition.shelfId, row: draggedPosition.row, col: draggedPosition.col },
+            to: { shelfId: currentShelf.id, row: targetRow, col: targetCol },
+            qty: Number(c.quantity) || 0,
+            user: user?.name || '',
+            expires: Date.now() + 15000
+          };
+        }
+      }
       // Salvar no destino (cria locations para cada cor)
       await saveProductToFirebase(currentShelf.id, targetRow, targetCol, draggedProduct);
 
@@ -3083,6 +3120,20 @@ const saveProduct = async () => {
 
     // Atualizar backend: criar locations no destino e remover a antiga origem
     try {
+      // Registrar transação de movimento por SKU+cor
+      if (moveSourcePosition?.product?.sku && Array.isArray(moveSourcePosition?.product?.colors)) {
+        for (const c of moveSourcePosition.product.colors) {
+          if (!c || !c.code) continue;
+          const k = `${String(moveSourcePosition.product.sku).trim()}-${String(c.code).trim()}`;
+          moveTxnRef.current[k] = {
+            from: { shelfId: moveSourcePosition.shelfId, row: moveSourcePosition.row, col: moveSourcePosition.col },
+            to: { shelfId: parseInt(moveTargetShelf), row: moveTargetPosition.row, col: moveTargetPosition.col },
+            qty: Number(c.quantity) || 0,
+            user: user?.name || '',
+            expires: Date.now() + 15000
+          };
+        }
+      }
       // Salvar no destino
       await saveProductToFirebase(parseInt(moveTargetShelf), moveTargetPosition.row, moveTargetPosition.col, moveSourcePosition.product);
 
