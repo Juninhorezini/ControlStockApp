@@ -74,6 +74,32 @@ function handleRequest(e) {
       return updateSummaryTotals(prateleiraSheet, totals, usuario);
     }
 
+    if (action === 'bulkShelves' && payloadJson && Array.isArray(payloadJson.products)) {
+      return bulkSyncShelves(prateleiraSheet, payloadJson);
+    }
+
+    if (action === 'bulkTotals' && payloadJson && Array.isArray(payloadJson.products)) {
+      return bulkUpdateTotals(prateleiraSheet, payloadJson);
+    }
+
+    if (action === 'updateTotal') {
+      var skuSingle = (payloadJson && payloadJson.sku) ? payloadJson.sku : (e.parameter.sku || '');
+      var corSingle = (payloadJson && payloadJson.cor) ? payloadJson.cor : (e.parameter.cor || '');
+      var qtdSingle = parseInt((payloadJson && payloadJson.quantidade) ? payloadJson.quantidade : (e.parameter.quantidade || 0)) || 0;
+      return updateSingleTotal(prateleiraSheet, skuSingle, corSingle, qtdSingle);
+    }
+
+    if (action === 'upsertShelfRow') {
+      var skuOne = (payloadJson && payloadJson.sku) ? payloadJson.sku : (e.parameter.sku || '');
+      var corOne = (payloadJson && payloadJson.cor) ? payloadJson.cor : (e.parameter.cor || '');
+      var qtdOne = parseInt((payloadJson && payloadJson.quantidade) ? payloadJson.quantidade : (e.parameter.quantidade || 0)) || 0;
+      var corredorOne = (payloadJson && payloadJson.corredor) ? payloadJson.corredor : (e.parameter.corredor || '');
+      var prateleiraOne = (payloadJson && payloadJson.prateleira) ? payloadJson.prateleira : (e.parameter.prateleira || '');
+      var localizacaoOne = (payloadJson && payloadJson.localizacao) ? payloadJson.localizacao : (e.parameter.localizacao || '');
+      var usuarioOne = (payloadJson && payloadJson.usuario) ? payloadJson.usuario : (e.parameter.usuario || 'Sistema');
+      return upsertShelfRow(prateleiraSheet, skuOne, corOne, qtdOne, corredorOne, prateleiraOne, localizacaoOne, usuarioOne);
+    }
+
     // ðŸ†• Parse do parÃ¢metro localizacoes se vier como string JSON
     let localizacoesArray = [];
     if (e.parameter.localizacoes) {
@@ -340,5 +366,150 @@ function ensureHeaderAtRow10(sheet) {
     sheet.getRange(10, 1, 1, 8).setValues([['Última Modificação', 'Modificado Por', 'SKU', 'Cor', 'Quantidade', 'Corredor', 'Prateleira', 'Localização']]);
     formatHeader(sheet, 10);
     sheet.setFrozenRows(10);
+  }
+}
+
+function bulkSyncShelves(prateleiraSheet, payload) {
+  var usuario = payload.usuario || 'Sistema';
+  var products = payload.products || [];
+  var dataHora = new Date().toLocaleString('pt-BR');
+  var lastRow = prateleiraSheet.getLastRow();
+  var map = {};
+  var dataRange = [];
+  if (lastRow >= 11) {
+    dataRange = prateleiraSheet.getRange(11, 1, lastRow - 10, 8).getValues();
+    for (var i = 0; i < dataRange.length; i++) {
+      var rowSKU = String(dataRange[i][2] || '').toUpperCase().trim();
+      var rowCOR = String(dataRange[i][3] || '').toUpperCase().trim();
+      var key = rowSKU + '|' + rowCOR;
+      map[key] = { row: 11 + i, quantidade: parseInt(dataRange[i][4]) || 0 };
+    }
+  }
+  var addValues = [];
+  var updateOps = [];
+  var deleteRows = [];
+  for (var p = 0; p < products.length; p++) {
+    var sku = String(products[p].sku || '').toUpperCase().trim();
+    var cor = String(products[p].cor || '').toUpperCase().trim();
+    var quantidadeTotal = parseInt(products[p].quantidade) || 0;
+    var corredor = products[p].corredor || '';
+    var prat = products[p].prateleira || '';
+    var loc = products[p].localizacao || '';
+    var key = sku + '|' + cor;
+    var existing = map[key] || null;
+    if (quantidadeTotal === 0) {
+      if (existing && existing.row > 0) {
+        deleteRows.push(existing.row);
+      }
+    } else {
+      if (existing && existing.row > 0) {
+        updateOps.push({ row: existing.row, values: [dataHora, usuario, sku, cor, quantidadeTotal, corredor, prat, loc] });
+      } else {
+        addValues.push([dataHora, usuario, sku, cor, quantidadeTotal, corredor, prat, loc]);
+      }
+    }
+  }
+  for (var u = 0; u < updateOps.length; u++) {
+    var op = updateOps[u];
+    prateleiraSheet.getRange(op.row, 1, 1, 8).setValues([op.values]);
+  }
+  if (addValues.length > 0) {
+    var lr = prateleiraSheet.getLastRow();
+    prateleiraSheet.getRange(lr + 1, 1, addValues.length, 8).setValues(addValues);
+  }
+  if (deleteRows.length > 0) {
+    deleteRows.sort(function(a, b) { return b - a; });
+    for (var d = 0; d < deleteRows.length; d++) {
+      try {
+        prateleiraSheet.deleteRow(deleteRows[d]);
+      } catch (err) {}
+    }
+  }
+  return ContentService.createTextOutput(JSON.stringify({ success: true, processed: products.length })).setMimeType(ContentService.MimeType.JSON);
+}
+
+function bulkUpdateTotals(prateleiraSheet, payload) {
+  var products = payload.products || [];
+  var lastRow = prateleiraSheet.getLastRow();
+  if (lastRow < 11) {
+    return ContentService.createTextOutput(JSON.stringify({ success: true, processed: 0 })).setMimeType(ContentService.MimeType.JSON);
+  }
+  var range = prateleiraSheet.getRange(11, 1, lastRow - 10, 8).getValues();
+  var qtyRange = prateleiraSheet.getRange(11, 5, lastRow - 10, 1);
+  var qtyValues = qtyRange.getValues();
+  var indexMap = {};
+  for (var i = 0; i < range.length; i++) {
+    var rowSKU = String(range[i][2] || '').toUpperCase().trim();
+    var rowCOR = String(range[i][3] || '').toUpperCase().trim();
+    indexMap[rowSKU + '|' + rowCOR] = i;
+  }
+  var processed = 0;
+  for (var p = 0; p < products.length; p++) {
+    var sku = String(products[p].sku || '').toUpperCase().trim();
+    var cor = String(products[p].cor || '').toUpperCase().trim();
+    var quantidade = parseInt(products[p].quantidade) || 0;
+    var key = sku + '|' + cor;
+    if (typeof indexMap[key] !== 'undefined') {
+      var idx = indexMap[key];
+      qtyValues[idx][0] = quantidade;
+      processed++;
+    }
+  }
+  qtyRange.setValues(qtyValues);
+  return ContentService.createTextOutput(JSON.stringify({ success: true, processed: processed })).setMimeType(ContentService.MimeType.JSON);
+}
+
+function updateSingleTotal(prateleiraSheet, sku, cor, quantidade) {
+  var lastRow = prateleiraSheet.getLastRow();
+  if (lastRow < 11) {
+    return ContentService.createTextOutput(JSON.stringify({ success: false, processed: 0 })).setMimeType(ContentService.MimeType.JSON);
+  }
+  var range = prateleiraSheet.getRange(11, 1, lastRow - 10, 8).getValues();
+  var targetRow = -1;
+  for (var i = 0; i < range.length; i++) {
+    var rowSKU = String(range[i][2] || '').toUpperCase().trim();
+    var rowCOR = String(range[i][3] || '').toUpperCase().trim();
+    if (rowSKU === String(sku || '').toUpperCase().trim() && rowCOR === String(cor || '').toUpperCase().trim()) {
+      targetRow = 11 + i;
+      break;
+    }
+  }
+  if (targetRow > 0) {
+    prateleiraSheet.getRange(targetRow, 5).setValue(parseInt(quantidade) || 0);
+    return ContentService.createTextOutput(JSON.stringify({ success: true, processed: 1 })).setMimeType(ContentService.MimeType.JSON);
+  }
+  return ContentService.createTextOutput(JSON.stringify({ success: true, processed: 0 })).setMimeType(ContentService.MimeType.JSON);
+}
+
+function upsertShelfRow(prateleiraSheet, sku, cor, quantidade, corredor, prateleira, localizacao, usuario) {
+  var dataHora = new Date().toLocaleString('pt-BR');
+  var lastRow = prateleiraSheet.getLastRow();
+  var targetRow = -1;
+  if (lastRow >= 11) {
+    var range = prateleiraSheet.getRange(11, 1, lastRow - 10, 8).getValues();
+    for (var i = 0; i < range.length; i++) {
+      var rowSKU = String(range[i][2] || '').toUpperCase().trim();
+      var rowCOR = String(range[i][3] || '').toUpperCase().trim();
+      if (rowSKU === String(sku || '').toUpperCase().trim() && rowCOR === String(cor || '').toUpperCase().trim()) {
+        targetRow = 11 + i;
+        break;
+      }
+    }
+  }
+  var q = parseInt(quantidade) || 0;
+  if (q === 0) {
+    if (targetRow > 0) {
+      try { prateleiraSheet.deleteRow(targetRow); } catch (err) {}
+      return ContentService.createTextOutput(JSON.stringify({ success: true, removed: 1 })).setMimeType(ContentService.MimeType.JSON);
+    }
+    return ContentService.createTextOutput(JSON.stringify({ success: true, removed: 0 })).setMimeType(ContentService.MimeType.JSON);
+  }
+  var values = [[dataHora, usuario || 'Sistema', String(sku || '').toUpperCase().trim(), String(cor || '').toUpperCase().trim(), q, corredor || '', prateleira || '', localizacao || '']];
+  if (targetRow > 0) {
+    prateleiraSheet.getRange(targetRow, 1, 1, 8).setValues(values);
+    return ContentService.createTextOutput(JSON.stringify({ success: true, updated: 1 })).setMimeType(ContentService.MimeType.JSON);
+  } else {
+    prateleiraSheet.getRange(prateleiraSheet.getLastRow() + 1, 1, 1, 8).setValues(values);
+    return ContentService.createTextOutput(JSON.stringify({ success: true, added: 1 })).setMimeType(ContentService.MimeType.JSON);
   }
 }

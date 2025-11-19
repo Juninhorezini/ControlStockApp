@@ -967,52 +967,79 @@ const computeTotalsFromFirebase = async () => {
       let successCount = 0;
       let errorCount = 0;
       
-      for (const product of consolidatedProducts) {
-        try {
-          const params = new URLSearchParams({
-            sku: product.sku.trim(),
-            cor: product.color.trim(),
-            quantidade: product.quantity,
-            usuario: user?.name || 'App React',
-            corredor: product.lastLocation.corredor,
-            prateleira: product.lastLocation.prateleira,
-            localizacao: product.lastLocation.localizacao,
-            localizacoes: JSON.stringify(product.localizacoes)
-          });
+      let bulkFailed = false;
+      try {
+        const bulkPayload = {
+          action: 'bulkShelves',
+          usuario: user?.name || 'App React',
+          products: consolidatedProducts.map(p => ({
+            sku: String(p.sku || '').trim(),
+            cor: String(p.color || '').trim(),
+            quantidade: Number(p.quantity) || 0,
+            corredor: p.lastLocation?.corredor || '',
+            prateleira: p.lastLocation?.prateleira || '',
+            localizacao: p.lastLocation?.localizacao || ''
+          }))
+        };
+        const resp = await fetch(sheetsUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(bulkPayload)
+        });
+        if (!resp.ok) throw new Error(String(resp.status));
+        successCount = consolidatedProducts.length;
+      } catch (err) {
+        bulkFailed = true;
+      }
 
+      if (bulkFailed) {
+        for (const product of consolidatedProducts) {
           try {
-            const resp = await fetch(sheetsUrl, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-              body: params.toString()
+            const params = new URLSearchParams({
+              action: 'upsertShelfRow',
+              sku: product.sku.trim(),
+              cor: product.color.trim(),
+              quantidade: product.quantity,
+              usuario: user?.name || 'App React',
+              corredor: product.lastLocation.corredor,
+              prateleira: product.lastLocation.prateleira,
+              localizacao: product.lastLocation.localizacao
             });
-            if (!resp.ok) throw new Error(String(resp.status));
-            successCount++;
-          } catch (e) {
-            await new Promise((resolve, reject) => {
-              const script = document.createElement('script');
-              script.src = `${sheetsUrl}?${params.toString()}`;
-              script.onerror = () => { setSyncStatus('Rede bloqueada para Google Sheets'); reject(new Error('jsonp_failed')); };
-              script.onload = () => resolve();
-              document.body.appendChild(script);
-              setTimeout(() => { try { document.body.removeChild(script); } catch (err) {} }, 3000);
-            }).then(() => { successCount++; }).catch(() => {
-              try {
-                const body = params.toString();
-                if (navigator.sendBeacon) {
-                  const blob = new Blob([body], { type: 'application/x-www-form-urlencoded' });
-                  navigator.sendBeacon(sheetsUrl, blob);
-                  successCount++;
-                } else {
+
+            try {
+              const resp = await fetch(sheetsUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: params.toString()
+              });
+              if (!resp.ok) throw new Error(String(resp.status));
+              successCount++;
+            } catch (e) {
+              await new Promise((resolve, reject) => {
+                const script = document.createElement('script');
+                script.src = `${sheetsUrl}?${params.toString()}`;
+                script.onerror = () => { setSyncStatus('Rede bloqueada para Google Sheets'); reject(new Error('jsonp_failed')); };
+                script.onload = () => resolve();
+                document.body.appendChild(script);
+                setTimeout(() => { try { document.body.removeChild(script); } catch (err) {} }, 3000);
+              }).then(() => { successCount++; }).catch(() => {
+                try {
+                  const body = params.toString();
+                  if (navigator.sendBeacon) {
+                    const blob = new Blob([body], { type: 'application/x-www-form-urlencoded' });
+                    navigator.sendBeacon(sheetsUrl, blob);
+                    successCount++;
+                  } else {
+                    errorCount++;
+                  }
+                } catch (err) {
                   errorCount++;
                 }
-              } catch (err) {
-                errorCount++;
-              }
-            });
+              });
+            }
+          } catch (error) {
+            errorCount++;
           }
-        } catch (error) {
-          errorCount++;
         }
       }
 
