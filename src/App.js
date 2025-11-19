@@ -1708,7 +1708,7 @@ const computeTotalsFromFirebase = async () => {
                 enqueueSheetSync(locSku, locColor, backendSnapshot, updatedBy, lastLocOverride, 'ADICIONAR', prevQty, newQty);
               })();
             }
-            sendSummaryTotalsDebounced();
+            if (!isMoveAdd) sendSummaryTotalsDebounced();
           } catch (err) {
             console.error('❌ Erro ao disparar sync após child added:', err);
           }
@@ -1824,6 +1824,7 @@ const computeTotalsFromFirebase = async () => {
                 delete lastLocationQuantitiesRef.current[locId];
                 await enqueueSheetSync(locSku, locColor, backendSnapshot, user.name, lastLocOverride, 'ATUALIZAR', prevQty, prevQty);
                 delete moveTxnRef.current[k];
+                lastSummarySentRef.current = 0;
               } else if (removedBy && removedBy === user.name) {
                 const backendSnapshot = await fetchLocationsFromFirebase(locSku, locColor);
                 const shelfObj = loc.shelf || {};
@@ -2992,6 +2993,19 @@ const saveProduct = async () => {
             delete newProducts[sourceKey];
             setProducts(newProducts);
             try {
+              if (moveSourcePosition?.product?.sku && Array.isArray(moveSourcePosition?.product?.colors)) {
+                for (const c of moveSourcePosition.product.colors) {
+                  if (!c || !c.code) continue;
+                  const k = `${String(moveSourcePosition.product.sku).trim()}-${String(c.code).trim()}`;
+                  moveTxnRef.current[k] = {
+                    from: { shelfId: moveSourcePosition.shelfId, row: moveSourcePosition.row, col: moveSourcePosition.col },
+                    to: { shelfId: parseInt(shelfId), row, col },
+                    qty: Number(c.quantity) || 0,
+                    user: user?.name || '',
+                    expires: Date.now() + 15000
+                  };
+                }
+              }
               await saveProductToFirebase(parseInt(shelfId), row, col, moveSourcePosition.product);
               await saveProductToFirebase(moveSourcePosition.shelfId, moveSourcePosition.row, moveSourcePosition.col, {});
 
