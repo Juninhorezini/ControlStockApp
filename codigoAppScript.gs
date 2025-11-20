@@ -74,8 +74,20 @@ function handleRequest(e) {
       return updateSummaryTotals(prateleiraSheet, totals, usuario);
     }
 
-    if (action === 'bulkShelves' && payloadJson && Array.isArray(payloadJson.products)) {
-      return bulkSyncShelves(prateleiraSheet, payloadJson);
+    if (action === 'bulkShelves') {
+      if (payloadJson && Array.isArray(payloadJson.products)) {
+        return bulkSyncShelves(prateleiraSheet, payloadJson);
+      }
+      var productsParam = null;
+      if (e.parameter.products) {
+        try {
+          productsParam = JSON.parse(e.parameter.products);
+        } catch (err) {
+          productsParam = [];
+        }
+        var usuarioBulk = e.parameter.usuario || 'Sistema';
+        return bulkSyncShelves(prateleiraSheet, { usuario: usuarioBulk, products: productsParam });
+      }
     }
 
     if (action === 'bulkTotals' && payloadJson && Array.isArray(payloadJson.products)) {

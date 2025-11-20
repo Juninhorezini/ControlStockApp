@@ -967,7 +967,7 @@ const computeTotalsFromFirebase = async () => {
       let successCount = 0;
       let errorCount = 0;
       
-      let bulkFailed = false;
+      let bulkFailedJSON = false;
       try {
         const bulkPayload = {
           action: 'bulkShelves',
@@ -989,10 +989,86 @@ const computeTotalsFromFirebase = async () => {
         if (!resp.ok) throw new Error(String(resp.status));
         successCount = consolidatedProducts.length;
       } catch (err) {
-        bulkFailed = true;
+        bulkFailedJSON = true;
       }
 
-      if (bulkFailed) {
+      let bulkFailedUrlenc = false;
+      if (bulkFailedJSON) {
+        try {
+          const params = new URLSearchParams();
+          params.set('action', 'bulkShelves');
+          params.set('usuario', user?.name || 'App React');
+          params.set('products', JSON.stringify(consolidatedProducts.map(p => ({
+            sku: String(p.sku || '').trim(),
+            cor: String(p.color || '').trim(),
+            quantidade: Number(p.quantity) || 0,
+            corredor: p.lastLocation?.corredor || '',
+            prateleira: p.lastLocation?.prateleira || '',
+            localizacao: p.lastLocation?.localizacao || ''
+          }))));
+          const resp = await fetch(sheetsUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: params.toString()
+          });
+          if (!resp.ok) throw new Error(String(resp.status));
+          successCount = consolidatedProducts.length;
+        } catch (e) {
+          bulkFailedUrlenc = true;
+        }
+      }
+
+      let bulkFailedJsonp = false;
+      if (bulkFailedJSON && bulkFailedUrlenc) {
+        try {
+          let processed = 0;
+          let i = 0;
+          while (i < consolidatedProducts.length) {
+            let chunk = [];
+            while (i < consolidatedProducts.length) {
+              const p = consolidatedProducts[i];
+              const item = {
+                sku: String(p.sku || '').trim(),
+                cor: String(p.color || '').trim(),
+                quantidade: Number(p.quantity) || 0,
+                corredor: p.lastLocation?.corredor || '',
+                prateleira: p.lastLocation?.prateleira || '',
+                localizacao: p.lastLocation?.localizacao || ''
+              };
+              const testChunk = [...chunk, item];
+              const testParams = new URLSearchParams();
+              testParams.set('callback', 'handleSyncResponse');
+              testParams.set('action', 'bulkShelves');
+              testParams.set('usuario', user?.name || 'App React');
+              testParams.set('products', JSON.stringify(testChunk));
+              const urlLen = `${sheetsUrl}?${testParams.toString()}`.length;
+              if (urlLen > 1800) break;
+              chunk = testChunk;
+              i++;
+            }
+            if (chunk.length === 0) throw new Error('chunk_size_too_small');
+            const params = new URLSearchParams();
+            params.set('callback', 'handleSyncResponse');
+            params.set('action', 'bulkShelves');
+            params.set('usuario', user?.name || 'App React');
+            params.set('products', JSON.stringify(chunk));
+            await new Promise((resolve, reject) => {
+              const script = document.createElement('script');
+              script.src = `${sheetsUrl}?${params.toString()}`;
+              script.onload = () => resolve();
+              script.onerror = () => reject(new Error('bulk_jsonp_failed'));
+              document.body.appendChild(script);
+              setTimeout(() => { try { document.body.removeChild(script); } catch (err) {} }, 5000);
+            });
+            processed += chunk.length;
+          }
+          successCount = processed;
+        } catch (e) {
+          bulkFailedJsonp = true;
+        }
+      }
+
+      if (bulkFailedJSON && bulkFailedUrlenc && bulkFailedJsonp) {
         for (const product of consolidatedProducts) {
           try {
             const params = new URLSearchParams({
