@@ -388,12 +388,20 @@ function bulkSyncShelves(prateleiraSheet, payload) {
   var lastRow = prateleiraSheet.getLastRow();
   var map = {};
   var dataRange = [];
+  
+  // Função para sanitizar chaves (deve ser igual ao JavaScript)
+  function sanitizeKeySegment(str) {
+    var s = String(str || '').trim();
+    var r = s.replace(/[.#$\[\]\/]/g, '_').replace(/\s+/g, '_');
+    return r.length ? r : 'x';
+  }
+  
   if (lastRow >= 11) {
     dataRange = prateleiraSheet.getRange(11, 1, lastRow - 10, 8).getValues();
     for (var i = 0; i < dataRange.length; i++) {
       var rowSKU = String(dataRange[i][2] || '').toUpperCase().trim();
       var rowCOR = String(dataRange[i][3] || '').toUpperCase().trim();
-      var key = rowSKU + '|' + rowCOR;
+      var key = sanitizeKeySegment(rowSKU) + '|' + sanitizeKeySegment(rowCOR);
       map[key] = { row: 11 + i, quantidade: parseInt(dataRange[i][4]) || 0 };
     }
   }
@@ -407,7 +415,7 @@ function bulkSyncShelves(prateleiraSheet, payload) {
     var corredor = products[p].corredor || '';
     var prat = products[p].prateleira || '';
     var loc = products[p].localizacao || '';
-    var key = sku + '|' + cor;
+    var key = sanitizeKeySegment(sku) + '|' + sanitizeKeySegment(cor);
     var existing = map[key] || null;
     if (quantidadeTotal === 0) {
       if (existing && existing.row > 0) {
@@ -450,17 +458,25 @@ function bulkUpdateTotals(prateleiraSheet, payload) {
   var qtyRange = prateleiraSheet.getRange(11, 5, lastRow - 10, 1);
   var qtyValues = qtyRange.getValues();
   var indexMap = {};
+  
+  // Função para sanitizar chaves (deve ser igual ao JavaScript)
+  function sanitizeKeySegment(str) {
+    var s = String(str || '').trim();
+    var r = s.replace(/[.#$\[\]\/]/g, '_').replace(/\s+/g, '_');
+    return r.length ? r : 'x';
+  }
+  
   for (var i = 0; i < range.length; i++) {
     var rowSKU = String(range[i][2] || '').toUpperCase().trim();
     var rowCOR = String(range[i][3] || '').toUpperCase().trim();
-    indexMap[rowSKU + '|' + rowCOR] = i;
+    indexMap[sanitizeKeySegment(rowSKU) + '|' + sanitizeKeySegment(rowCOR)] = i;
   }
   var processed = 0;
   for (var p = 0; p < products.length; p++) {
     var sku = String(products[p].sku || '').toUpperCase().trim();
     var cor = String(products[p].cor || '').toUpperCase().trim();
     var quantidade = parseInt(products[p].quantidade) || 0;
-    var key = sku + '|' + cor;
+    var key = sanitizeKeySegment(sku) + '|' + sanitizeKeySegment(cor);
     if (typeof indexMap[key] !== 'undefined') {
       var idx = indexMap[key];
       qtyValues[idx][0] = quantidade;
@@ -478,10 +494,21 @@ function updateSingleTotal(prateleiraSheet, sku, cor, quantidade) {
   }
   var range = prateleiraSheet.getRange(11, 1, lastRow - 10, 8).getValues();
   var targetRow = -1;
+  
+  // Função para sanitizar chaves (deve ser igual ao JavaScript)
+  function sanitizeKeySegment(str) {
+    var s = String(str || '').trim();
+    var r = s.replace(/[.#$\[\]\/]/g, '_').replace(/\s+/g, '_');
+    return r.length ? r : 'x';
+  }
+  
+  var inputSku = sanitizeKeySegment(String(sku || '').toUpperCase().trim());
+  var inputCor = sanitizeKeySegment(String(cor || '').toUpperCase().trim());
+  
   for (var i = 0; i < range.length; i++) {
-    var rowSKU = String(range[i][2] || '').toUpperCase().trim();
-    var rowCOR = String(range[i][3] || '').toUpperCase().trim();
-    if (rowSKU === String(sku || '').toUpperCase().trim() && rowCOR === String(cor || '').toUpperCase().trim()) {
+    var rowSKU = sanitizeKeySegment(String(range[i][2] || '').toUpperCase().trim());
+    var rowCOR = sanitizeKeySegment(String(range[i][3] || '').toUpperCase().trim());
+    if (rowSKU === inputSku && rowCOR === inputCor) {
       targetRow = 11 + i;
       break;
     }
@@ -497,12 +524,22 @@ function upsertShelfRow(prateleiraSheet, sku, cor, quantidade, corredor, pratele
   var dataHora = new Date().toLocaleString('pt-BR');
   var lastRow = prateleiraSheet.getLastRow();
   var targetRow = -1;
+  
+  // Função para sanitizar chaves (deve ser igual ao JavaScript)
+  function sanitizeKeySegment(str) {
+    var s = String(str || '').trim();
+    var r = s.replace(/[.#$\[\]\/]/g, '_').replace(/\s+/g, '_');
+    return r.length ? r : 'x';
+  }
+  
   if (lastRow >= 11) {
     var range = prateleiraSheet.getRange(11, 1, lastRow - 10, 8).getValues();
+    var inputSku = sanitizeKeySegment(String(sku || '').toUpperCase().trim());
+    var inputCor = sanitizeKeySegment(String(cor || '').toUpperCase().trim());
     for (var i = 0; i < range.length; i++) {
-      var rowSKU = String(range[i][2] || '').toUpperCase().trim();
-      var rowCOR = String(range[i][3] || '').toUpperCase().trim();
-      if (rowSKU === String(sku || '').toUpperCase().trim() && rowCOR === String(cor || '').toUpperCase().trim()) {
+      var rowSKU = sanitizeKeySegment(String(range[i][2] || '').toUpperCase().trim());
+      var rowCOR = sanitizeKeySegment(String(range[i][3] || '').toUpperCase().trim());
+      if (rowSKU === inputSku && rowCOR === inputCor) {
         targetRow = 11 + i;
         break;
       }
