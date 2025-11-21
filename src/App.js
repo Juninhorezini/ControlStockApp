@@ -2530,7 +2530,7 @@ const saveProductToFirebase = async (shelfId, row, col, productData) => {
         const qty = Number(color?.quantity);
         if (!color?.code) continue;
         if (qty > 0) {
-          const locationId = `loc_${currentShelf.id}_${row}_${col}_${sanitizeKeySegment(color.code)}`;
+          const locationId = `loc_${currentShelf.id}_${row}_${col}_${sanitizeKeySegment(productData.sku)}_${sanitizeKeySegment(color.code)}`;
           desired[color.code] = {
             id: locationId,
             data: {
@@ -2561,23 +2561,26 @@ const saveProductToFirebase = async (shelfId, row, col, productData) => {
 
       const updates = {};
       const removedLocIds = [];
-      // Remover cores não desejadas
+      // Remover cores não desejadas ou localizações com SKU diferente
       for (const [locId, loc] of Object.entries(allLocs)) {
         if (loc.shelf.id === currentShelf.id && loc.position.row === row && loc.position.col === col) {
-          if (!desired[loc.color]) {
+          // Remover se a cor não existe mais OU se o SKU mudou
+          if (!desired[loc.color] || loc.sku !== productData.sku) {
             updates[`locations/${locId}`] = null;
             removedLocIds.push(locId);
           }
         }
       }
 
-      // Upsert apenas cores novas ou com quantidade alterada
+      // Upsert apenas cores novas ou com quantidade/SKU alterado
       for (const entry of Object.values(desired)) {
         const existing = allLocs[entry.id];
         const existingQty = existing ? Number(existing.quantity) : null;
+        const existingSku = existing ? existing.sku : null;
         const desiredQty = Number(entry.data.quantity);
+        const desiredSku = entry.data.sku;
         const isNew = !existing;
-        const changed = isNew || existingQty !== desiredQty;
+        const changed = isNew || existingQty !== desiredQty || existingSku !== desiredSku;
         if (changed) {
           updates[`locations/${entry.id}`] = entry.data;
         }
