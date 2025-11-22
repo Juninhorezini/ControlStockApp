@@ -2682,7 +2682,8 @@ const saveProduct = async () => {
             shelfId: parseInt(shelfId),
             row: parseInt(row),
             col: parseInt(col),
-            key: key
+            key: key,
+            observation: product.observation || ''
           });
         } else {
           const matchingColors = (product.colors || []).filter(color =>
@@ -2697,7 +2698,8 @@ const saveProduct = async () => {
               shelfId: parseInt(shelfId),
               row: parseInt(row),
               col: parseInt(col),
-              key: key
+              key: key,
+              observation: product.observation || ''
             });
           }
         }
@@ -3558,7 +3560,12 @@ const saveProduct = async () => {
                     <div key={index} className="bg-white p-3 rounded-lg border border-gray-200">
                       <div className="flex flex-col gap-2">
                         <div className="flex items-center justify-between">
-                          <span className="font-bold text-blue-600 text-sm md:text-base">{result.sku}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-blue-600 text-sm md:text-base">{result.sku}</span>
+                            {(result.observation || '').trim() && (
+                              <span className="text-red-600 bg-red-50 px-2 py-1 rounded text-xs md:text-sm">{result.observation}</span>
+                            )}
+                          </div>
                           <button
                             onClick={() => highlightPosition(result)}
                             className="flex items-center gap-1 text-xs md:text-sm text-gray-600 hover:text-blue-600 cursor-pointer bg-gray-50 px-2 py-1 rounded min-h-[44px] justify-center"
