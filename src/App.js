@@ -64,6 +64,7 @@ const StockControlApp = () => {
   const [selectedShelf, setSelectedShelf] = useStoredState('selectedShelf', 0);
   const [searchSKU, setSearchSKU] = useState('');
   const [searchColor, setSearchColor] = useState('');
+  const [searchObservation, setSearchObservation] = useState('');
   const [showAddShelf, setShowAddShelf] = useState(false);
   const [showAddShelfToCorridor, setShowAddShelfToCorridor] = useState(false);
   const [selectedCorridorForNewShelf, setSelectedCorridorForNewShelf] = useState('');
@@ -2663,17 +2664,15 @@ const saveProduct = async () => {
     const results = [];
     const skuTerm = searchSKU.trim().toLowerCase();
     const colorTerm = searchColor.trim().toLowerCase();
-    
-    if (!skuTerm && !colorTerm) return [];
+    const obsTerm = searchObservation.trim().toLowerCase();
+    if (!skuTerm && !colorTerm && !obsTerm) return [];
     if (!products || typeof products !== 'object') return [];
-    
     Object.entries(products).forEach(([key, product]) => {
       const [shelfId, row, col] = key.split('-');
       const shelf = (Array.isArray(shelves) ? shelves : []).find(s => s.id === parseInt(shelfId));
-      
-      const skuMatch = !skuTerm || (product.sku && product.sku.toLowerCase().includes(skuTerm));
-      
-      if (skuMatch) {
+      const skuPass = !skuTerm || (product.sku && product.sku.toLowerCase().includes(skuTerm));
+      const obsPass = !obsTerm || ((product.observation || '').toLowerCase().includes(obsTerm));
+      if (skuPass && obsPass) {
         if (!colorTerm) {
           results.push({
             sku: product.sku || '',
@@ -2686,10 +2685,9 @@ const saveProduct = async () => {
             key: key
           });
         } else {
-          const matchingColors = (product.colors || []).filter(color => 
+          const matchingColors = (product.colors || []).filter(color =>
             color.code && color.code.toLowerCase().includes(colorTerm)
           );
-          
           if (matchingColors.length > 0) {
             results.push({
               sku: product.sku || '',
@@ -2705,7 +2703,6 @@ const saveProduct = async () => {
         }
       }
     });
-    
     return results;
   };
 
@@ -3513,8 +3510,7 @@ const saveProduct = async () => {
             </div>
           </div>
           
-          {/* Busca Dupla */}
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 md:gap-4">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-3 md:gap-4">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
               <input
@@ -3537,10 +3533,21 @@ const saveProduct = async () => {
                 style={{ fontSize: '16px' }}
               />
             </div>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Observação (ex: Premium)"
+                className="w-full pl-10 pr-4 py-3 md:py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-16px"
+                value={searchObservation}
+                onChange={(e) => setSearchObservation(e.target.value)}
+                style={{ fontSize: '16px' }}
+              />
+            </div>
           </div>
           
           {/* Resultados da busca */}
-          {(searchSKU || searchColor) && (
+          {(searchSKU || searchColor || searchObservation) && (
             <div className="mt-4 bg-gray-50 rounded-lg p-3 md:p-4">
               <h3 className="font-semibold mb-2 text-sm md:text-base">Resultados ({searchResults.length})</h3>
               {searchResults.length === 0 ? (
