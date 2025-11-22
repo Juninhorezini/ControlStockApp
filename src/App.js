@@ -2382,7 +2382,8 @@ const computeTotalsFromFirebase = async () => {
     setEditingProduct((products || {})[key] || { 
       sku: '', 
       unit: 'caixas',
-      colors: []
+      colors: [],
+      observation: ''
     });
     setShowEditProduct(true);
   };
@@ -2538,6 +2539,7 @@ const saveProductToFirebase = async (shelfId, row, col, productData) => {
               color: color.code,
               quantity: qty,
               unit: productData.unit || 'unidades',
+              observation: productData.observation || '',
               shelf: {
                 id: currentShelf.id,
                 name: currentShelf.name,
@@ -4235,6 +4237,18 @@ const saveProduct = async () => {
                       <option value="quilos">Quilos</option>
                     </select>
                   </div>
+                </div>
+                
+                <div className="mb-4">
+                  <label className="block text-sm font-medium mb-2">Observações</label>
+                  <input
+                    type="text"
+                    className="w-full px-3 py-3 md:py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-16px"
+                    value={editingProduct.observation || ''}
+                    onChange={(e) => setEditingProduct({...editingProduct, observation: e.target.value})}
+                    placeholder="Observações do produto (opcional)"
+                    style={{ fontSize: '16px' }}
+                  />
                 </div>
                 
                 <div>
