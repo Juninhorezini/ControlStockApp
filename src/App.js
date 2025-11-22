@@ -221,6 +221,9 @@ const enqueueSheetSync = async (sku, color, snapshot, lastUpdaterName, lastLocOv
       const now = Date.now();
       const prev = lastSheetSyncRef.current[key] || 0;
       if (now - prev < 1200) {
+        // Remover também os dados gerais do produto
+        const productRef = ref(database, `products/${currentShelf.id}_${row}_${col}_${sanitizeKeySegment(productData.sku)}`);
+        await remove(productRef);
         return;
       }
       lastSheetSyncRef.current[key] = now;
@@ -2375,16 +2378,37 @@ const computeTotalsFromFirebase = async () => {
     setEditingCorridor({ oldName: '', newName: '' });
   };
 
-  const openEditProduct = (row, col) => {
+  const openEditProduct = async (row, col) => {
     if (!currentShelf) return;
     const key = `${currentShelf.id}-${row}-${col}`;
     setEditingPosition({ row, col, key });
-    setEditingProduct((products || {})[key] || { 
+    
+    // Carregar dados do produto (incluindo observação) do Firebase
+    const existingProduct = (products || {})[key] || { 
       sku: '', 
       unit: 'caixas',
       colors: [],
       observation: ''
-    });
+    };
+    
+    // Tentar carregar observação do Firebase products node
+    try {
+      if (existingProduct.sku) {
+        const productRef = ref(database, `products/${currentShelf.id}_${row}_${col}_${sanitizeKeySegment(existingProduct.sku)}`);
+        const snapshot = await new Promise((resolve) => {
+          onValue(productRef, resolve, { onlyOnce: true });
+        });
+        
+        if (snapshot.exists()) {
+          const productData = snapshot.val();
+          existingProduct.observation = productData.observation || '';
+        }
+      }
+    } catch (error) {
+      console.log('Erro ao carregar observação do Firebase:', error);
+    }
+    
+    setEditingProduct(existingProduct);
     setShowEditProduct(true);
   };
 
@@ -2512,8 +2536,40 @@ const saveProductToFirebase = async (shelfId, row, col, productData) => {
             console.log('🗑️ Removido do Firebase:', locId);
           }
         });
+        
+        // Remover também os dados gerais do produto (se existirem)
+        const currentShelf = shelves.find(s => s.id === shelfId);
+        if (currentShelf) {
+          const productRef = ref(database, `products/${currentShelf.id}_${row}_${col}_${sanitizeKeySegment(productData.sku || 'empty')}`);
+          await remove(productRef);
+          console.log('🗑️ Dados do produto removidos do Firebase');
+        }
         return;
       }
+
+      // Salvar dados gerais do produto (incluindo observação)
+      const productRef = ref(database, `products/${currentShelf.id}_${row}_${col}_${sanitizeKeySegment(productData.sku)}`);
+      await set(productRef, {
+        sku: productData.sku,
+        unit: productData.unit || 'unidades',
+        observation: productData.observation || '',
+        shelf: {
+          id: currentShelf.id,
+          name: currentShelf.name,
+          corridor: currentShelf.corridor || currentShelf.name[0]
+        },
+        position: {
+          row: row,
+          col: col,
+          label: `L${currentShelf.rows - row}:C${col + 1}`
+        },
+        metadata: {
+          created_at: Date.now(),
+          updated_at: Date.now(),
+          created_by: user.name,
+          updated_by: user.name
+        }
+      });
 
       // Salvar cada cor como uma localização com atualização atômica
       const currentShelf = shelves.find(s => s.id === shelfId);
