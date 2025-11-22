@@ -1722,6 +1722,7 @@ const computeTotalsFromFirebase = async () => {
               sku: loc.sku, 
               unit: loc.unit, 
               colors: [],
+              observation: loc.observation || '',
               lastModified: new Date(loc.metadata.updated_at).toISOString(),
               modifiedBy: loc.metadata.updated_by
             };
@@ -1760,9 +1761,12 @@ const computeTotalsFromFirebase = async () => {
               sku: loc.sku,
               unit: loc.unit,
               colors: [],
+              observation: loc.observation || '',
               lastModified: new Date(loc.metadata.updated_at).toISOString(),
               modifiedBy: loc.metadata.updated_by
             };
+          } else {
+            newProds[key].observation = loc.observation || newProds[key].observation || '';
           }
 
           const colorIndex = newProds[key].colors.findIndex(c => c.code === loc.color);
@@ -1837,6 +1841,7 @@ const computeTotalsFromFirebase = async () => {
               newProds[key].colors.push({ code: loc.color, quantity: loc.quantity });
               newProds[key].lastModified = new Date(loc.metadata.updated_at).toISOString();
             }
+            newProds[key].observation = loc.observation || newProds[key].observation || '';
           }
           return newProds;
         });
@@ -2388,22 +2393,16 @@ const computeTotalsFromFirebase = async () => {
       observation: ''
     };
     
-    // Tentar carregar observação do Firebase products node
     try {
-      if (existingProduct.sku) {
-        const productRef = ref(database, `products/${currentShelf.id}_${row}_${col}_${sanitizeKeySegment(existingProduct.sku)}`);
-        const snapshot = await new Promise((resolve) => {
-          onValue(productRef, resolve, { onlyOnce: true });
-        });
-        
-        if (snapshot.exists()) {
-          const productData = snapshot.val();
-          existingProduct.observation = productData.observation || '';
+      const locSnap = await get(ref(database, 'locations'));
+      const locs = locSnap.val() || {};
+      for (const [, loc] of Object.entries(locs)) {
+        if (loc.shelf?.id === currentShelf.id && loc.position?.row === row && loc.position?.col === col) {
+          existingProduct.observation = loc.observation || '';
+          break;
         }
       }
-    } catch (error) {
-      console.log('Erro ao carregar observação do Firebase:', error);
-    }
+    } catch (error) {}
     
     setEditingProduct(existingProduct);
     setShowEditProduct(true);
@@ -2540,36 +2539,10 @@ const saveProductToFirebase = async (shelfId, row, col, productData) => {
           updates[`locations/${locId}`] = null;
         }
       }
-      const productKey = `${currentShelf.id}_${row}_${col}_${sanitizeKeySegment(oldSku || productData?.sku || 'empty')}`;
-      updates[`products/${productKey}`] = null;
       if (Object.keys(updates).length > 0) {
         await update(ref(database), updates);
       }
       return;
-    }
-    const productKey = `${currentShelf.id}_${row}_${col}_${sanitizeKeySegment(productData.sku)}`;
-    updates[`products/${productKey}`] = {
-      sku: productData.sku,
-      unit: productData.unit || 'unidades',
-      observation: productData.observation || '',
-      shelf: {
-        id: currentShelf.id,
-        name: currentShelf.name,
-        corridor: currentShelf.corridor || currentShelf.name[0]
-      },
-      position: {
-        row,
-        col,
-        label: `L${currentShelf.rows - row}:C${col + 1}`
-      },
-      metadata: {
-        updated_at: Date.now(),
-        updated_by: user.name
-      }
-    };
-    if (oldSku && oldSku !== productData.sku) {
-      const oldProductKey = `${currentShelf.id}_${row}_${col}_${sanitizeKeySegment(oldSku)}`;
-      updates[`products/${oldProductKey}`] = null;
     }
     const desiredIds = new Set();
     for (const c of (productData.colors || [])) {
@@ -2583,6 +2556,7 @@ const saveProductToFirebase = async (shelfId, row, col, productData) => {
         color: code,
         quantity: qty,
         unit: productData.unit || 'unidades',
+        observation: productData.observation || '',
         shelf: {
           id: currentShelf.id,
           name: currentShelf.name,
