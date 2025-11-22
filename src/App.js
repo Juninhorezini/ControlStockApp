@@ -221,9 +221,6 @@ const enqueueSheetSync = async (sku, color, snapshot, lastUpdaterName, lastLocOv
       const now = Date.now();
       const prev = lastSheetSyncRef.current[key] || 0;
       if (now - prev < 1200) {
-        // Remover também os dados gerais do produto
-        const productRef = ref(database, `products/${currentShelf.id}_${row}_${col}_${sanitizeKeySegment(productData.sku)}`);
-        await remove(productRef);
         return;
       }
       lastSheetSyncRef.current[key] = now;
@@ -2520,150 +2517,100 @@ const computeTotalsFromFirebase = async () => {
   // Helper: Salvar produto no Firebase
 const saveProductToFirebase = async (shelfId, row, col, productData) => {
   try {
-    console.log('💾 Salvando no Firebase:', { shelfId, row, col, productData });
-
-      if (!productData.sku || !productData.colors || productData.colors.length === 0) {
-        // Deletar todas as localizações deste produto
-        const locsRef = ref(database, 'locations');
-        const snapshot = await new Promise(resolve => {
-          onValue(locsRef, resolve, { onlyOnce: true });
-        });
-        const allLocs = snapshot.val() || {};
-
-        Object.entries(allLocs).forEach(([locId, loc]) => {
-          if (loc.shelf.id === shelfId && loc.position.row === row && loc.position.col === col) {
-            remove(ref(database, `locations/${locId}`));
-            console.log('🗑️ Removido do Firebase:', locId);
-          }
-        });
-        
-        // Remover também os dados gerais do produto (se existirem)
-        const currentShelf = shelves.find(s => s.id === shelfId);
-        if (currentShelf) {
-          const productRef = ref(database, `products/${currentShelf.id}_${row}_${col}_${sanitizeKeySegment(productData.sku || 'empty')}`);
-          await remove(productRef);
-          console.log('🗑️ Dados do produto removidos do Firebase');
+    const currentShelf = (Array.isArray(shelves) ? shelves : []).find(s => s.id === shelfId);
+    if (!currentShelf) {
+      console.error('Prateleira não encontrada', shelfId);
+      return;
+    }
+    const locsSnap = await get(ref(database, 'locations'));
+    const allLocs = locsSnap.val() || {};
+    const updates = {};
+    let oldSku = null;
+    for (const [, loc] of Object.entries(allLocs)) {
+      if (loc.shelf?.id === shelfId && loc.position?.row === row && loc.position?.col === col) {
+        if (productData?.sku && loc.sku && loc.sku !== productData.sku) {
+          oldSku = loc.sku;
+          break;
         }
-        return;
       }
-
-      // Salvar dados gerais do produto (incluindo observação)
-      const productRef = ref(database, `products/${currentShelf.id}_${row}_${col}_${sanitizeKeySegment(productData.sku)}`);
-      await set(productRef, {
+    }
+    if (!productData?.sku || !productData?.colors || productData.colors.length === 0) {
+      for (const [locId, loc] of Object.entries(allLocs)) {
+        if (loc.shelf?.id === shelfId && loc.position?.row === row && loc.position?.col === col) {
+          updates[`locations/${locId}`] = null;
+        }
+      }
+      const productKey = `${currentShelf.id}_${row}_${col}_${sanitizeKeySegment(oldSku || productData?.sku || 'empty')}`;
+      updates[`products/${productKey}`] = null;
+      if (Object.keys(updates).length > 0) {
+        await update(ref(database), updates);
+      }
+      return;
+    }
+    const productKey = `${currentShelf.id}_${row}_${col}_${sanitizeKeySegment(productData.sku)}`;
+    updates[`products/${productKey}`] = {
+      sku: productData.sku,
+      unit: productData.unit || 'unidades',
+      observation: productData.observation || '',
+      shelf: {
+        id: currentShelf.id,
+        name: currentShelf.name,
+        corridor: currentShelf.corridor || currentShelf.name[0]
+      },
+      position: {
+        row,
+        col,
+        label: `L${currentShelf.rows - row}:C${col + 1}`
+      },
+      metadata: {
+        updated_at: Date.now(),
+        updated_by: user.name
+      }
+    };
+    if (oldSku && oldSku !== productData.sku) {
+      const oldProductKey = `${currentShelf.id}_${row}_${col}_${sanitizeKeySegment(oldSku)}`;
+      updates[`products/${oldProductKey}`] = null;
+    }
+    const desiredIds = new Set();
+    for (const c of (productData.colors || [])) {
+      const code = c?.code;
+      const qty = Number(c?.quantity);
+      if (!code || qty <= 0) continue;
+      const locationId = `loc_${currentShelf.id}_${row}_${col}_${sanitizeKeySegment(productData.sku)}_${sanitizeKeySegment(code)}`;
+      desiredIds.add(locationId);
+      updates[`locations/${locationId}`] = {
         sku: productData.sku,
+        color: code,
+        quantity: qty,
         unit: productData.unit || 'unidades',
-        observation: productData.observation || '',
         shelf: {
           id: currentShelf.id,
           name: currentShelf.name,
           corridor: currentShelf.corridor || currentShelf.name[0]
         },
         position: {
-          row: row,
-          col: col,
+          row,
+          col,
           label: `L${currentShelf.rows - row}:C${col + 1}`
         },
         metadata: {
-          created_at: Date.now(),
           updated_at: Date.now(),
-          created_by: user.name,
           updated_by: user.name
         }
-      });
-
-      // Salvar cada cor como uma localização com atualização atômica
-      const currentShelf = shelves.find(s => s.id === shelfId);
-      if (!currentShelf) return;
-
-      // Buscar locations atuais e aplicar diff atômico
-      const locsRef = ref(database, 'locations');
-      const snapshot = await new Promise(resolve => {
-        onValue(locsRef, resolve, { onlyOnce: true });
-      });
-      const allLocs = snapshot.val() || {};
-
-      const desired = {};
-      for (const color of productData.colors) {
-        const qty = Number(color?.quantity);
-        if (!color?.code) continue;
-        if (qty > 0) {
-          const locationId = `loc_${currentShelf.id}_${row}_${col}_${sanitizeKeySegment(productData.sku)}_${sanitizeKeySegment(color.code)}`;
-          desired[color.code] = {
-            id: locationId,
-            data: {
-              sku: productData.sku,
-              color: color.code,
-              quantity: qty,
-              unit: productData.unit || 'unidades',
-              observation: productData.observation || '',
-              shelf: {
-                id: currentShelf.id,
-                name: currentShelf.name,
-                corridor: currentShelf.corridor || currentShelf.name[0]
-              },
-              position: {
-                row: row,
-                col: col,
-                label: `L${currentShelf.rows - row}:C${col + 1}`
-              },
-              metadata: {
-                created_at: Date.now(),
-                updated_at: Date.now(),
-                created_by: user.name,
-                updated_by: user.name
-              }
-            }
-          };
-        }
-      }
-
-      const updates = {};
-      const removedLocIds = [];
-      // Remover cores não desejadas ou localizações com SKU diferente
-      for (const [locId, loc] of Object.entries(allLocs)) {
-        if (loc.shelf.id === currentShelf.id && loc.position.row === row && loc.position.col === col) {
-          // Remover se a cor não existe mais OU se o SKU mudou
-          if (!desired[loc.color] || loc.sku !== productData.sku) {
-            updates[`locations/${locId}`] = null;
-            removedLocIds.push(locId);
-          }
-        }
-      }
-
-      // Upsert apenas cores novas ou com quantidade/SKU alterado
-      for (const entry of Object.values(desired)) {
-        const existing = allLocs[entry.id];
-        const existingQty = existing ? Number(existing.quantity) : null;
-        const existingSku = existing ? existing.sku : null;
-        const desiredQty = Number(entry.data.quantity);
-        const desiredSku = entry.data.sku;
-        const isNew = !existing;
-        const changed = isNew || existingQty !== desiredQty || existingSku !== desiredSku;
-        if (changed) {
-          updates[`locations/${entry.id}`] = entry.data;
-        }
-      }
-
-      // Atualizar metadados para remoções com o usuário atual antes de remover
-      for (const locId of removedLocIds) {
-        try {
-          await update(ref(database, `locations/${locId}/metadata`), {
-            updated_at: Date.now(),
-            updated_by: user.name,
-            removed_by: user.name
-          });
-        } catch (e) {}
-      }
-
-      await update(ref(database), updates);
-      console.log('✅ Atualização atômica aplicada para posição', { shelfId: currentShelf.id, row, col });
-
-
-
-    } catch (error) {
-      console.error('❌ Erro ao salvar no Firebase:', error);
+      };
     }
-  };
+    for (const [locId, loc] of Object.entries(allLocs)) {
+      if (loc.shelf?.id === shelfId && loc.position?.row === row && loc.position?.col === col) {
+        if (!desiredIds.has(locId)) {
+          updates[`locations/${locId}`] = null;
+        }
+      }
+    }
+    await update(ref(database), updates);
+  } catch (error) {
+    console.error('Erro ao salvar no Firebase', error);
+  }
+};
 
 
   
