@@ -408,6 +408,7 @@ function bulkSyncShelves(prateleiraSheet, payload) {
   var addValues = [];
   var updateOps = [];
   var deleteRows = [];
+  var incomingKeys = {};
   for (var p = 0; p < products.length; p++) {
     var sku = String(products[p].sku || '').toUpperCase().trim();
     var cor = String(products[p].cor || '').toUpperCase().trim();
@@ -416,6 +417,7 @@ function bulkSyncShelves(prateleiraSheet, payload) {
     var prat = products[p].prateleira || '';
     var loc = products[p].localizacao || '';
     var key = sanitizeKeySegment(sku) + '|' + sanitizeKeySegment(cor);
+    incomingKeys[key] = true;
     var existing = map[key] || null;
     if (quantidadeTotal === 0) {
       if (existing && existing.row > 0) {
@@ -442,6 +444,21 @@ function bulkSyncShelves(prateleiraSheet, payload) {
     for (var d = 0; d < deleteRows.length; d++) {
       try {
         prateleiraSheet.deleteRow(deleteRows[d]);
+      } catch (err) {}
+    }
+  }
+  var staleRows = [];
+  for (var k in map) {
+    if (map.hasOwnProperty(k) && !incomingKeys[k]) {
+      var r = map[k].row;
+      if (r && staleRows.indexOf(r) === -1) staleRows.push(r);
+    }
+  }
+  if (staleRows.length > 0) {
+    staleRows.sort(function(a, b) { return b - a; });
+    for (var s = 0; s < staleRows.length; s++) {
+      try {
+        prateleiraSheet.deleteRow(staleRows[s]);
       } catch (err) {}
     }
   }

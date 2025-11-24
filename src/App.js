@@ -1934,7 +1934,7 @@ const computeTotalsFromFirebase = async () => {
                 await enqueueSheetSync(locSku, locColor, backendSnapshot, user.name, lastLocOverride, 'ATUALIZAR', prevQty, prevQty);
                 delete moveTxnRef.current[k];
                 lastSummarySentRef.current = 0;
-              } else if (removedBy && removedBy === user.name) {
+              } else {
                 const backendSnapshot = await fetchLocationsFromFirebase(locSku, locColor);
                 const shelfObj = loc.shelf || {};
                 const pos = loc.position || {};
