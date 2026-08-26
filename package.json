@@ -2,7 +2,7 @@
   "name": "control-stock-app",
   "version": "2.1.0",
   "private": true,
-  "homepage": "https://juninhorezini.github.io/ControlStockApp/",
+  "homepage": ".",
   "dependencies": {
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
@@ -11,8 +11,10 @@
     "firebase": "^10.7.1"
   },
   "scripts": {
+    "dev": "PORT=3000 HOST=0.0.0.0 react-scripts start",
     "start": "react-scripts start",
     "build": "DISABLE_ESLINT_PLUGIN=true react-scripts build",
+    "lint": "eslint 'src/**/*.{js,jsx}'",
     "test": "react-scripts test",
     "eject": "react-scripts eject",
     "predeploy": "npm run build",

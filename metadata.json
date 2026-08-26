@@ -1,0 +1,6 @@
+{
+  "name": "ControlStockApp",
+  "description": "Sistema de Controle de Estoque de Prateleira",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
