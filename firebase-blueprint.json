@@ -1,0 +1,75 @@
+{
+  "entities": {
+    "users": {
+      "title": "users",
+      "description": "User profile data and role permissions",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "username": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "user"] },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["email", "role"]
+    },
+    "usernames": {
+      "title": "usernames",
+      "description": "Username to UID lookup mapping",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" }
+      },
+      "required": ["uid"]
+    },
+    "locations": {
+      "title": "locations",
+      "description": "Inventory locations for SKUs and shelf items",
+      "type": "object",
+      "properties": {
+        "sku": { "type": "string" },
+        "cor": { "type": "string" },
+        "corredor": { "type": "string" },
+        "prateleira": { "type": "string" },
+        "localizacao": { "type": "string" },
+        "quantidade": { "type": "number" },
+        "metadata": { "type": "object" }
+      }
+    },
+    "shelves": {
+      "title": "shelves",
+      "description": "Shelf layouts and configurations",
+      "type": "object",
+      "properties": {
+        "corredor": { "type": "string" },
+        "prateleiras": { "type": "array" }
+      }
+    },
+    "history": {
+      "title": "history",
+      "description": "Stock movement and location updates history",
+      "type": "object",
+      "properties": {
+        "sku": { "type": "string" },
+        "cor": { "type": "string" },
+        "quantidadeTotal": { "type": "number" },
+        "timestamp": { "type": "number" },
+        "localizacoes": { "type": "array" },
+        "ultimaLocalizacao": { "type": "object" }
+      }
+    },
+    "audit_log": {
+      "title": "audit_log",
+      "description": "Audit trails for user actions and system changes",
+      "type": "object",
+      "properties": {
+        "user": { "type": "object" },
+        "action": { "type": "string" },
+        "details": { "type": "object" },
+        "targetId": { "type": "string" },
+        "timestamp": { "type": "string" }
+      }
+    }
+  }
+}

@@ -43,16 +43,7 @@ try {
 
 
 
-const StockControlApp = () => {
-  // Firebase listeners são sempre ativos
-
-  // ✅ AUTENTICAÇÃO
-  const { user: authUser } = useAuth();
-
-  if (!authUser) {
-    return <LoginPage />;
-  }
-
+const StockControlAppMain = ({ authUser }) => {
   const user = {
     id: authUser.uid,
     name: authUser.displayName || authUser.email.split('@')[0],
@@ -2426,7 +2417,7 @@ const computeTotalsFromFirebase = async () => {
 
   const removeColor = (index) => {
     if (!editingProduct.colors) return;
-    if (!confirm('Deseja realmente excluir esta cor?')) return;
+    if (typeof window !== 'undefined' && window.confirm && !window.confirm('Deseja realmente excluir esta cor?')) return;
     const newColors = editingProduct.colors.filter((_, i) => i !== index);
     setEditingProduct({
       ...editingProduct,
@@ -5395,6 +5386,27 @@ const saveProduct = async () => {
       </div>
     </div>
   );
+};
+
+const StockControlApp = () => {
+  const { user: authUser, loading: authLoading } = useAuth();
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600 font-medium">Carregando...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!authUser) {
+    return <LoginPage />;
+  }
+
+  return <StockControlAppMain authUser={authUser} />;
 };
 
 export default StockControlApp;
