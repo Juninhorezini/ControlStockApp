@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, Plus, Edit, Trash2, Package, MapPin, Grid, Save, X, Minus, Shield, Settings, Lock, User, ChevronDown } from 'lucide-react';
+import { Search, Plus, Edit, Trash2, Package, MapPin, Grid, Save, X, Minus, Shield, Settings, Lock, User, ChevronDown, Loader2 } from 'lucide-react';
 import { database, ref, onValue, set, update, push, remove , get, onChildAdded, onChildChanged, onChildRemoved} from './firebaseConfig';
 
 // ✅ AUTENTICAÇÃO
@@ -8,6 +8,18 @@ import { LoginPage } from './pages/LoginPage';
 import { LogoutButton } from './components/LogoutButton';
 import UserManagementModal from './components/UserManagementModal';
 import { logAuditAction, addUserMetadata, updateUserMetadata } from './utils/auditService';
+
+// Helper para obter o corredor de uma prateleira de forma padronizada
+const getShelfCorridor = (shelf) => {
+  if (!shelf) return '';
+  if (shelf.corridor && typeof shelf.corridor === 'string' && shelf.corridor.trim()) {
+    return shelf.corridor.trim().toUpperCase();
+  }
+  const name = shelf.name || '';
+  const match = name.match(/corredor\s+([A-Za-z0-9_-]+)/i);
+  if (match) return match[1].toUpperCase();
+  return name ? name.charAt(0).toUpperCase() : 'A';
+};
 
 
 
@@ -79,8 +91,10 @@ const StockControlAppMain = ({ authUser }) => {
   const [showSecuritySettings, setShowSecuritySettings] = useState(false);
   const [showEditShelf, setShowEditShelf] = useState(false);
   const [editingShelf, setEditingShelf] = useState(null);
+  const [isSavingShelf, setIsSavingShelf] = useState(false);
   const [showEditCorridor, setShowEditCorridor] = useState(false);
   const [editingCorridor, setEditingCorridor] = useState({ oldName: '', newName: '' });
+  const [isSavingCorridor, setIsSavingCorridor] = useState(false);
   const [expandedCorridors, setExpandedCorridors] = useState({});
   const [isMobile, setIsMobile] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
@@ -518,7 +532,7 @@ const enqueueSheetSync = async (sku, color, snapshot, lastUpdaterName, lastLocOv
       
       if (!shelf) return;
       
-      const corridor = shelf.corridor || shelf.name.charAt(0).toUpperCase();
+      const corridor = getShelfCorridor(shelf);
       const location = `L${shelf.rows - row}:C${col + 1}`;
       
       (product.colors || []).forEach(color => {
@@ -612,7 +626,7 @@ const enqueueSheetSync = async (sku, color, snapshot, lastUpdaterName, lastLocOv
                   
                   // 🆕 Dados da localização atual
                   const currentLocation = {
-                    corredor: shelf.corridor || shelf.name.charAt(0),
+                    corredor: getShelfCorridor(shelf),
                     prateleira: shelf.name,
                     localizacao: `L${shelf.rows - row}:C${col + 1}`,
                     quantidade: color.quantity,
@@ -715,7 +729,7 @@ const syncSingleProductWithSheets = async (sku, color = '', productsSnapshot = n
                 const shelf = shelves.find(s => s.id === shelfId);
                 if (shelf) {
                   localizacoesArray.push({
-                    corredor: shelf.corridor || shelf.name.charAt(0),
+                    corredor: getShelfCorridor(shelf),
                     prateleira: shelf.name,
                     localizacao: `L${shelf.rows - row}:C${col + 1}`,
                     quantidade: c.quantity
@@ -839,7 +853,7 @@ const fetchLocationsFromFirebase = async (sku, color) => {
         const shelfObj = (Array.isArray(shelves) ? shelves.find(s => s.id === shelfFromLoc.id) : null) || shelfFromLoc;
         totalQuantity += (parseInt(loc.quantity, 10) || 0);
         localizacoes.push({
-          corredor: shelfObj.corridor || shelfObj.corridor || shelfObj.name?.charAt?.(0) || '',
+          corredor: getShelfCorridor(shelfObj),
           prateleira: shelfObj.name || '',
           localizacao: loc.position ? (`L${(shelfObj.rows || 0) - (loc.position.row || 0)}:C${(loc.position.col || 0) + 1}`) : '',
           quantidade: parseInt(loc.quantity, 10) || 0
@@ -893,7 +907,7 @@ const computeTotalsFromFirebase = async () => {
       
       // Usar o mapa de prateleiras para encontrar o corredor
       const shelf = shelvesMap[loc.shelfId];
-      const corr = shelf ? String((shelf.corridor || (shelf.name && shelf.name.charAt(0))) || '').trim() : '';
+      const corr = shelf ? getShelfCorridor(shelf) : '';
       if (corr) corridorSet.add(corr);
       
       totalQuantity += Number(loc.quantity) || 0;
@@ -1340,7 +1354,7 @@ const computeTotalsFromFirebase = async () => {
             shelf: {
               id: shelfId,
               name: shelf?.name || '',
-              corridor: shelf?.corridor || (shelf?.name ? shelf.name[0] : '')
+              corridor: getShelfCorridor(shelf)
             },
             position: {
               row,
@@ -1693,8 +1707,23 @@ const computeTotalsFromFirebase = async () => {
         }
         const data = snapshot.val();
         if (data) {
-          setShelves(Object.values(data));
-          console.log('Prateleiras carregadas:', Object.values(data).length);
+          const loadedShelves = Object.values(data).map(s => ({
+            ...s,
+            corridor: getShelfCorridor(s)
+          }));
+          setShelves(loadedShelves);
+          console.log('Prateleiras carregadas:', loadedShelves.length);
+        } else {
+          // Se o Firebase ainda não tiver prateleiras salvas, salvar padrão no Firebase
+          const defaultShelves = [
+            { id: 1, name: 'Corredor A - Prateleira 1', rows: 4, cols: 6, corridor: 'A' },
+            { id: 2, name: 'Corredor A - Prateleira 2', rows: 3, cols: 5, corridor: 'A' },
+            { id: 3, name: 'Corredor B - Prateleira 1', rows: 5, cols: 4, corridor: 'B' }
+          ];
+          const shelvesObj = {};
+          defaultShelves.forEach(s => { shelvesObj[s.id] = s; });
+          set(ref(database, 'shelves'), shelvesObj).catch(console.error);
+          setShelves(defaultShelves);
         }
       });
 
@@ -1793,7 +1822,7 @@ const computeTotalsFromFirebase = async () => {
                 const shelfObj = loc.shelf || {};
                 const pos = loc.position || {};
                 const lastLocOverride = {
-                  corredor: shelfObj.corridor || (shelfObj.name ? shelfObj.name.charAt(0) : ''),
+                  corredor: getShelfCorridor(shelfObj),
                   prateleira: shelfObj.name || '',
                   localizacao: (pos?.label) || ((typeof shelfObj.rows === 'number' && typeof pos.row === 'number' && typeof pos.col === 'number')
                     ? `L${shelfObj.rows - pos.row}:C${pos.col + 1}`
@@ -1853,7 +1882,7 @@ const computeTotalsFromFirebase = async () => {
                 const shelfObj = loc.shelf || {};
                 const pos = loc.position || {};
                 const lastLocOverride = {
-                  corredor: shelfObj.corridor || (shelfObj.name ? shelfObj.name.charAt(0) : ''),
+                  corredor: getShelfCorridor(shelfObj),
                   prateleira: shelfObj.name || '',
                   localizacao: (pos?.label) || ((typeof shelfObj.rows === 'number' && typeof pos.row === 'number' && typeof pos.col === 'number')
                     ? `L${shelfObj.rows - pos.row}:C${pos.col + 1}`
@@ -1914,7 +1943,7 @@ const computeTotalsFromFirebase = async () => {
                 const backendSnapshot = await fetchLocationsFromFirebase(locSku, locColor);
                 const destShelf = shelves.find(s => s.id === txn.to.shelfId) || {};
                 const lastLocOverride = {
-                  corredor: destShelf.corridor || (destShelf.name ? destShelf.name.charAt(0) : ''),
+                  corredor: getShelfCorridor(destShelf),
                   prateleira: destShelf.name || '',
                   localizacao: `L${(destShelf.rows || 0) - txn.to.row}:C${txn.to.col + 1}`,
                   quantidade: Number(txn.qty) || 0
@@ -1930,7 +1959,7 @@ const computeTotalsFromFirebase = async () => {
                 const shelfObj = loc.shelf || {};
                 const pos = loc.position || {};
                 const lastLocOverride = {
-                  corredor: shelfObj.corridor || (shelfObj.name ? shelfObj.name.charAt(0) : ''),
+                  corredor: getShelfCorridor(shelfObj),
                   prateleira: shelfObj.name || '',
                   localizacao: (pos?.label) || ((typeof shelfObj.rows === 'number' && typeof pos.row === 'number' && typeof pos.col === 'number')
                     ? `L${shelfObj.rows - pos.row}:C${pos.col + 1}`
@@ -2119,20 +2148,30 @@ const computeTotalsFromFirebase = async () => {
     }
   }, [selectedShelf, currentShelf?.id]);
 
-  const createShelf = () => {
+  const createShelf = async () => {
     if (!newShelfName.trim()) return;
     
+    const calculatedCorridor = getShelfCorridor({ name: newShelfName.trim() });
     const newShelf = {
       id: Date.now(),
       name: newShelfName.trim(),
       rows: Math.max(1, Math.min(10, parseInt(newShelfRows) || 4)),
       cols: Math.max(1, parseInt(newShelfCols) || 6),
-      corridor: newShelfName.charAt(0).toUpperCase()
+      corridor: calculatedCorridor
     };
     
-    setShelves([...(Array.isArray(shelves) ? shelves : []), newShelf]);
+    const updatedShelves = [...(Array.isArray(shelves) ? shelves : []), newShelf];
+    setShelves(updatedShelves);
     setNewShelfName('');
     setShowAddShelf(false);
+
+    try {
+      const shelvesObj = {};
+      updatedShelves.forEach(s => { shelvesObj[s.id] = s; });
+      await set(ref(database, 'shelves'), shelvesObj);
+    } catch (err) {
+      console.error('Erro ao salvar prateleira no Firebase:', err);
+    }
   };
 
   // Função para criar prateleira em corredor específico
@@ -2141,14 +2180,14 @@ const computeTotalsFromFirebase = async () => {
     setShowAddShelfToCorridor(true);
     
     // Sugerir um nome baseado no corredor e quantidade de prateleiras existentes
-    const corridorShelves = shelves.filter(shelf => 
-      (shelf.corridor || shelf.name.charAt(0).toUpperCase()) === corridor
+    const corridorShelves = (Array.isArray(shelves) ? shelves : []).filter(shelf => 
+      getShelfCorridor(shelf) === corridor
     );
     const nextNumber = corridorShelves.length + 1;
     setNewShelfName(`Corredor ${corridor} - Prateleira ${nextNumber}`);
   };
 
-  const createShelfInCorridor = () => {
+  const createShelfInCorridor = async () => {
     if (!newShelfName.trim() || !selectedCorridorForNewShelf) return;
     
     const newShelf = {
@@ -2159,7 +2198,8 @@ const computeTotalsFromFirebase = async () => {
       corridor: selectedCorridorForNewShelf
     };
     
-    setShelves([...(Array.isArray(shelves) ? shelves : []), newShelf]);
+    const updatedShelves = [...(Array.isArray(shelves) ? shelves : []), newShelf];
+    setShelves(updatedShelves);
     setNewShelfName('');
     setShowAddShelfToCorridor(false);
     setSelectedCorridorForNewShelf('');
@@ -2169,6 +2209,14 @@ const computeTotalsFromFirebase = async () => {
       ...prev,
       [selectedCorridorForNewShelf]: true
     }));
+
+    try {
+      const shelvesObj = {};
+      updatedShelves.forEach(s => { shelvesObj[s.id] = s; });
+      await set(ref(database, 'shelves'), shelvesObj);
+    } catch (err) {
+      console.error('Erro ao salvar prateleira no corredor:', err);
+    }
   };
 
   const requestDeleteShelf = (shelfId) => {
@@ -2205,7 +2253,7 @@ const computeTotalsFromFirebase = async () => {
     setDeleteShelfId(null);
   };
 
-  const deleteShelf = (shelfId) => {
+  const deleteShelf = async (shelfId) => {
     const newShelves = (Array.isArray(shelves) ? shelves : []).filter(shelf => shelf.id !== shelfId);
     setShelves(newShelves);
     
@@ -2218,7 +2266,29 @@ const computeTotalsFromFirebase = async () => {
     setProducts(newProducts);
     
     if (selectedShelf >= newShelves.length) {
-      setSelectedShelf(0);
+      setSelectedShelf(Math.max(0, newShelves.length - 1));
+    }
+
+    try {
+      const shelvesObj = {};
+      newShelves.forEach(s => { shelvesObj[s.id] = s; });
+      await set(ref(database, 'shelves'), shelvesObj);
+
+      const locsSnap = await get(ref(database, 'locations'));
+      if (locsSnap.exists()) {
+        const locs = locsSnap.val();
+        const locUpdates = {};
+        for (const [locId, loc] of Object.entries(locs)) {
+          if (loc.shelf && loc.shelf.id === shelfId) {
+            locUpdates[`locations/${locId}`] = null;
+          }
+        }
+        if (Object.keys(locUpdates).length > 0) {
+          await update(ref(database), locUpdates);
+        }
+      }
+    } catch (err) {
+      console.error('Erro ao deletar prateleira do Firebase:', err);
     }
   };
 
@@ -2232,6 +2302,7 @@ const computeTotalsFromFirebase = async () => {
   const openEditShelf = (shelf) => {
     setEditingShelf({ 
       ...shelf,
+      corridor: getShelfCorridor(shelf),
       newRows: shelf.rows,
       newCols: shelf.cols,
       originalRows: shelf.rows,
@@ -2240,11 +2311,12 @@ const computeTotalsFromFirebase = async () => {
     setShowEditShelf(true);
   };
 
-  const saveEditShelf = () => {
-    if (!editingShelf.name.trim()) return;
+  const saveEditShelf = async () => {
+    if (!editingShelf || !editingShelf.name.trim()) return;
     
     const newRows = Math.max(1, Math.min(10, parseInt(editingShelf.newRows) || editingShelf.originalRows));
     const newCols = Math.max(1, parseInt(editingShelf.newCols) || editingShelf.originalCols);
+    const newCorridor = (editingShelf.corridor || getShelfCorridor(editingShelf)).trim().toUpperCase();
     
     // Verificar se as dimensões mudaram
     const dimensionsChanged = newRows !== editingShelf.originalRows || newCols !== editingShelf.originalCols;
@@ -2288,21 +2360,61 @@ const computeTotalsFromFirebase = async () => {
       }
     }
     
+    setIsSavingShelf(true);
+
     // Atualizar a prateleira
-    const updatedShelves = shelves.map(shelf => 
-      shelf.id === editingShelf.id 
-        ? { 
-            ...editingShelf, 
-            name: editingShelf.name.trim(),
-            rows: newRows,
-            cols: newCols
-          }
-        : shelf
+    const updatedShelf = { 
+      id: editingShelf.id,
+      name: editingShelf.name.trim(),
+      rows: newRows,
+      cols: newCols,
+      corridor: newCorridor
+    };
+    
+    const updatedShelves = (Array.isArray(shelves) ? shelves : []).map(shelf => 
+      shelf.id === editingShelf.id ? updatedShelf : shelf
     );
     
     setShelves(updatedShelves);
-    setShowEditShelf(false);
-    setEditingShelf(null);
+
+    try {
+      const shelvesObj = {};
+      updatedShelves.forEach(s => {
+        shelvesObj[s.id] = s;
+      });
+      await set(ref(database, 'shelves'), shelvesObj);
+
+      // Atualizar também locations correspondentes no Firebase
+      const locsSnap = await get(ref(database, 'locations'));
+      if (locsSnap.exists()) {
+        const locs = locsSnap.val();
+        const locUpdates = {};
+        for (const [locId, loc] of Object.entries(locs)) {
+          if (loc.shelf && loc.shelf.id === updatedShelf.id) {
+            if (loc.position && (loc.position.row >= newRows || loc.position.col >= newCols)) {
+              locUpdates[`locations/${locId}`] = null;
+            } else {
+              locUpdates[`locations/${locId}/shelf/name`] = updatedShelf.name;
+              locUpdates[`locations/${locId}/shelf/corridor`] = updatedShelf.corridor;
+              if (loc.position) {
+                locUpdates[`locations/${locId}/position/label`] = `L${newRows - loc.position.row}:C${loc.position.col + 1}`;
+              }
+            }
+          }
+        }
+        if (Object.keys(locUpdates).length > 0) {
+          await update(ref(database), locUpdates);
+        }
+      }
+
+      setShowEditShelf(false);
+      setEditingShelf(null);
+    } catch (err) {
+      console.error('Erro ao salvar prateleira no Firebase:', err);
+      alert('Erro ao salvar no banco de dados: ' + (err?.message || err));
+    } finally {
+      setIsSavingShelf(false);
+    }
   };
 
   // Função para agrupar prateleiras por corredor
@@ -2310,7 +2422,7 @@ const computeTotalsFromFirebase = async () => {
     const groups = {};
     
     (Array.isArray(shelves) ? shelves : []).forEach(shelf => {
-      const corridor = shelf.corridor || shelf.name.charAt(0).toUpperCase();
+      const corridor = getShelfCorridor(shelf);
       if (!groups[corridor]) {
         groups[corridor] = [];
       }
@@ -2333,7 +2445,7 @@ const computeTotalsFromFirebase = async () => {
     setShowEditCorridor(true);
   };
 
-  const saveEditCorridor = () => {
+  const saveEditCorridor = async () => {
     if (!editingCorridor.newName.trim() || editingCorridor.newName === editingCorridor.oldName) {
       setShowEditCorridor(false);
       setEditingCorridor({ oldName: '', newName: '' });
@@ -2341,17 +2453,20 @@ const computeTotalsFromFirebase = async () => {
     }
     
     const newCorridorName = editingCorridor.newName.trim().toUpperCase();
+    const oldCorridorName = editingCorridor.oldName;
     
+    setIsSavingCorridor(true);
+
     // Atualizar todas as prateleiras do corredor
-    const updatedShelves = shelves.map(shelf => {
-      const currentCorridor = shelf.corridor || shelf.name.charAt(0).toUpperCase();
-      if (currentCorridor === editingCorridor.oldName) {
+    const updatedShelves = (Array.isArray(shelves) ? shelves : []).map(shelf => {
+      const currentCorridor = getShelfCorridor(shelf);
+      if (currentCorridor === oldCorridorName) {
         return {
           ...shelf,
           corridor: newCorridorName,
           // Opcional: atualizar o nome da prateleira também se seguir o padrão "Corredor X - ..."
-          name: shelf.name.startsWith(`Corredor ${editingCorridor.oldName}`) 
-            ? shelf.name.replace(`Corredor ${editingCorridor.oldName}`, `Corredor ${newCorridorName}`)
+          name: shelf.name.startsWith(`Corredor ${oldCorridorName}`) 
+            ? shelf.name.replace(`Corredor ${oldCorridorName}`, `Corredor ${newCorridorName}`)
             : shelf.name
         };
       }
@@ -2362,14 +2477,50 @@ const computeTotalsFromFirebase = async () => {
     
     // Atualizar os corredores expandidos
     const newExpandedCorridors = { ...expandedCorridors };
-    if (newExpandedCorridors[editingCorridor.oldName] !== undefined) {
-      newExpandedCorridors[newCorridorName] = newExpandedCorridors[editingCorridor.oldName];
-      delete newExpandedCorridors[editingCorridor.oldName];
+    if (newExpandedCorridors[oldCorridorName] !== undefined) {
+      newExpandedCorridors[newCorridorName] = newExpandedCorridors[oldCorridorName];
+      delete newExpandedCorridors[oldCorridorName];
       setExpandedCorridors(newExpandedCorridors);
     }
-    
-    setShowEditCorridor(false);
-    setEditingCorridor({ oldName: '', newName: '' });
+
+    try {
+      const shelvesObj = {};
+      const changedShelfIds = new Set();
+      updatedShelves.forEach(s => {
+        shelvesObj[s.id] = s;
+        if (getShelfCorridor(s) === newCorridorName) {
+          changedShelfIds.add(s.id);
+        }
+      });
+      await set(ref(database, 'shelves'), shelvesObj);
+
+      // Atualizar também o nome/corredor em locations do Firebase para integridade dos dados
+      const locsSnap = await get(ref(database, 'locations'));
+      if (locsSnap.exists()) {
+        const locs = locsSnap.val();
+        const locUpdates = {};
+        for (const [locId, loc] of Object.entries(locs)) {
+          if (loc.shelf && changedShelfIds.has(loc.shelf.id)) {
+            const updatedShelf = updatedShelves.find(s => s.id === loc.shelf.id);
+            if (updatedShelf) {
+              locUpdates[`locations/${locId}/shelf/name`] = updatedShelf.name;
+              locUpdates[`locations/${locId}/shelf/corridor`] = updatedShelf.corridor;
+            }
+          }
+        }
+        if (Object.keys(locUpdates).length > 0) {
+          await update(ref(database), locUpdates);
+        }
+      }
+
+      setShowEditCorridor(false);
+      setEditingCorridor({ oldName: '', newName: '' });
+    } catch (err) {
+      console.error('Erro ao salvar corredor no Firebase:', err);
+      alert('Erro ao salvar corredor no banco de dados: ' + (err?.message || err));
+    } finally {
+      setIsSavingCorridor(false);
+    }
   };
 
   const openEditProduct = async (row, col) => {
@@ -2408,7 +2559,6 @@ const computeTotalsFromFirebase = async () => {
       });
       return;
     }
-    if (editingProduct.colors.length >= 12) return;
     setEditingProduct({
       ...editingProduct,
       colors: [...editingProduct.colors, { code: '', quantity: 0 }]
@@ -2481,7 +2631,7 @@ const computeTotalsFromFirebase = async () => {
           shelf: {
             id: shelfId,
             name: shelf.name,
-            corridor: shelf.corridor || shelf.name[0]
+            corridor: getShelfCorridor(shelf)
           },
           position: {
             row: row,
@@ -2552,7 +2702,7 @@ const saveProductToFirebase = async (shelfId, row, col, productData) => {
         shelf: {
           id: currentShelf.id,
           name: currentShelf.name,
-          corridor: currentShelf.corridor || currentShelf.name[0]
+          corridor: getShelfCorridor(currentShelf)
         },
         position: {
           row,
@@ -3868,16 +4018,27 @@ const saveProduct = async () => {
               <div className="flex gap-3 mt-6 md:mt-6">
                 <button
                   onClick={saveEditCorridor}
-                  className="flex-1 flex items-center justify-center gap-2 px-4 py-3 md:py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 min-h-[48px]"
+                  disabled={isSavingCorridor}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-3 md:py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 min-h-[48px]"
                 >
-                  <Save className="w-4 h-4" />
-                  Salvar
+                  {isSavingCorridor ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Salvando...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4" />
+                      Salvar
+                    </>
+                  )}
                 </button>
                 <button
                   onClick={() => {
                     setShowEditCorridor(false);
                     setEditingCorridor({ oldName: '', newName: '' });
                   }}
+                  disabled={isSavingCorridor}
                   className="flex-1 flex items-center justify-center gap-2 px-4 py-3 md:py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 min-h-[48px]"
                 >
                   <X className="w-4 h-4" />
@@ -3903,6 +4064,18 @@ const saveProduct = async () => {
                     value={editingShelf.name}
                     onChange={(e) => setEditingShelf({...editingShelf, name: e.target.value})}
                     placeholder="Ex: Corredor C - Prateleira 1"
+                    style={{ fontSize: '16px' }}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium mb-2">Corredor</label>
+                  <input
+                    type="text"
+                    className="w-full px-3 py-3 md:py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-16px"
+                    value={editingShelf.corridor || ''}
+                    onChange={(e) => setEditingShelf({...editingShelf, corridor: e.target.value.toUpperCase()})}
+                    placeholder="Ex: A, B, C..."
                     style={{ fontSize: '16px' }}
                   />
                 </div>
@@ -3994,19 +4167,30 @@ const saveProduct = async () => {
               <div className="flex gap-3 mt-6 md:mt-6">
                 <button
                   onClick={saveEditShelf}
-                  className="flex-1 flex items-center justify-center gap-2 px-4 py-3 md:py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 min-h-[48px]"
+                  disabled={isSavingShelf}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-3 md:py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 min-h-[48px]"
                 >
-                  <Save className="w-4 h-4" />
-                  {(editingShelf.newRows !== editingShelf.originalRows || editingShelf.newCols !== editingShelf.originalCols) 
-                    ? 'Redimensionar' 
-                    : 'Salvar'
-                  }
+                  {isSavingShelf ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Salvando...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4" />
+                      {(editingShelf.newRows !== editingShelf.originalRows || editingShelf.newCols !== editingShelf.originalCols) 
+                        ? 'Redimensionar' 
+                        : 'Salvar'
+                      }
+                    </>
+                  )}
                 </button>
                 <button
                   onClick={() => {
                     setShowEditShelf(false);
                     setEditingShelf(null);
                   }}
+                  disabled={isSavingShelf}
                   className="flex-1 flex items-center justify-center gap-2 px-4 py-3 md:py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 min-h-[48px]"
                 >
                   <X className="w-4 h-4" />
@@ -4238,15 +4422,14 @@ const saveProduct = async () => {
                     <label className="block text-sm font-medium">Cores e Quantidades</label>
                     <button
                       onClick={addColor}
-                      disabled={(editingProduct.colors?.length || 0) >= 12}
-                      className="flex items-center justify-center gap-1 px-3 py-2 bg-green-600 text-white rounded text-sm hover:bg-green-700 disabled:bg-gray-400 min-h-[44px]"
+                      className="flex items-center justify-center gap-1 px-3 py-2 bg-green-600 text-white rounded text-sm hover:bg-green-700 min-h-[44px]"
                     >
                       <Plus className="w-3 h-3" />
                       Adicionar Cor
                     </button>
                   </div>
                   
-                  <div className="space-y-2 max-h-60 overflow-y-auto">
+                  <div className="space-y-2 max-h-72 overflow-y-auto">
                     {(editingProduct.colors || []).map((color, index) => (
                       <div key={index} className="flex gap-2 items-center p-2 bg-gray-50 rounded">
                         <input
@@ -4318,7 +4501,7 @@ const saveProduct = async () => {
               {isMobile && (
                 <div className="mt-4 p-3 bg-blue-50 rounded-lg">
                   <p className="text-sm text-blue-600">
-                    💡 Dicas: Para remover o produto, apague o SKU e salve. Máximo de 12 cores por produto.
+                    💡 Dicas: Para remover o produto, apague o SKU e salve.
                   </p>
                 </div>
               )}
