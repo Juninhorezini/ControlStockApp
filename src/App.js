@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, Plus, Edit, Trash2, Package, MapPin, Grid, Save, X, Minus, Shield, Settings, Lock, User, ChevronDown, Loader2 } from 'lucide-react';
+import { Search, Plus, Edit, Trash2, Package, MapPin, Grid, Save, X, Minus, Shield, Settings, Lock, User, ChevronDown, Loader2, Clock } from 'lucide-react';
 import { database, ref, onValue, set, update, push, remove , get, onChildAdded, onChildChanged, onChildRemoved} from './firebaseConfig';
 
 // ✅ AUTENTICAÇÃO
@@ -19,6 +19,19 @@ const getShelfCorridor = (shelf) => {
   const match = name.match(/corredor\s+([A-Za-z0-9_-]+)/i);
   if (match) return match[1].toUpperCase();
   return name ? name.charAt(0).toUpperCase() : 'A';
+};
+
+// Helper para formatar data e hora da movimentação em formato brasileiro compacto (DD/MM/AAAA HH:mm)
+const formatMovementDate = (timestamp) => {
+  if (!timestamp) return '';
+  const d = new Date(timestamp);
+  if (isNaN(d.getTime())) return '';
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const year = d.getFullYear();
+  const hours = String(d.getHours()).padStart(2, '0');
+  const minutes = String(d.getMinutes()).padStart(2, '0');
+  return `${day}/${month}/${year} ${hours}:${minutes}`;
 };
 
 
@@ -64,6 +77,7 @@ const StockControlAppMain = ({ authUser }) => {
   };
   const [shelves, setShelves] = useStoredState('shelves', []);
   const [products, setProducts] = useState({});  // Firebase é a fonte da verdade
+  const [locationRecords, setLocationRecords] = useState({}); // Registros e histórico por localização
   const [selectedShelf, setSelectedShelf] = useStoredState('selectedShelf', 0);
   const [searchSKU, setSearchSKU] = useState('');
   const [searchColor, setSearchColor] = useState('');
@@ -1727,6 +1741,13 @@ const computeTotalsFromFirebase = async () => {
         }
       });
 
+      // Sincronização em tempo real de registros por localização
+      const locRecordsRef = ref(database, 'location_records');
+      const unsubLocRecords = onValue(locRecordsRef, (snapshot) => {
+        const records = snapshot.val() || {};
+        setLocationRecords(records);
+      });
+
       // Locations: get inicial + child listeners (OTIMIZADO)
       const locsRef = ref(database, 'locations');
 
@@ -1738,17 +1759,24 @@ const computeTotalsFromFirebase = async () => {
         Object.entries(locs).forEach(([id, loc]) => {
           lastLocationQuantitiesRef.current[id] = Number(loc.quantity) || 0;
           const key = loc.shelf.id + '-' + loc.position.row + '-' + loc.position.col;
+          const colorUpdatedAt = loc.metadata?.updated_at || loc.metadata?.created_at || Date.now();
+          const colorUpdatedBy = (typeof loc.metadata?.updated_by === 'string' ? loc.metadata?.updated_by : (loc.metadata?.updated_by?.displayName || loc.metadata?.updated_by?.email)) || 'Sistema';
           if (!prods[key]) {
             prods[key] = { 
               sku: loc.sku, 
               unit: loc.unit, 
               colors: [],
               observation: loc.observation || '',
-              lastModified: new Date(loc.metadata.updated_at).toISOString(),
-              modifiedBy: loc.metadata.updated_by
+              lastModified: new Date(colorUpdatedAt).toISOString(),
+              modifiedBy: colorUpdatedBy
             };
           }
-          prods[key].colors.push({ code: loc.color, quantity: loc.quantity });
+          prods[key].colors.push({ 
+            code: loc.color, 
+            quantity: loc.quantity,
+            updatedAt: colorUpdatedAt,
+            updatedBy: colorUpdatedBy
+          });
         });
 
         console.log('setProducts chamado! Produtos:', Object.keys(prods).length);
@@ -1777,14 +1805,17 @@ const computeTotalsFromFirebase = async () => {
 
         setProducts(prev => {
           const newProds = { ...prev };
+          const colorUpdatedAt = loc.metadata?.updated_at || loc.metadata?.created_at || Date.now();
+          const colorUpdatedBy = (typeof loc.metadata?.updated_by === 'string' ? loc.metadata?.updated_by : (loc.metadata?.updated_by?.displayName || loc.metadata?.updated_by?.email)) || 'Sistema';
+
           if (!newProds[key]) {
             newProds[key] = {
               sku: loc.sku,
               unit: loc.unit,
               colors: [],
               observation: loc.observation || '',
-              lastModified: new Date(loc.metadata.updated_at).toISOString(),
-              modifiedBy: loc.metadata.updated_by
+              lastModified: new Date(colorUpdatedAt).toISOString(),
+              modifiedBy: colorUpdatedBy
             };
           } else {
             newProds[key].observation = loc.observation || newProds[key].observation || '';
@@ -1792,9 +1823,9 @@ const computeTotalsFromFirebase = async () => {
 
           const colorIndex = newProds[key].colors.findIndex(c => c.code === loc.color);
           if (colorIndex >= 0) {
-            newProds[key].colors[colorIndex] = { code: loc.color, quantity: loc.quantity };
+            newProds[key].colors[colorIndex] = { code: loc.color, quantity: loc.quantity, updatedAt: colorUpdatedAt, updatedBy: colorUpdatedBy };
           } else {
-            newProds[key].colors.push({ code: loc.color, quantity: loc.quantity });
+            newProds[key].colors.push({ code: loc.color, quantity: loc.quantity, updatedAt: colorUpdatedAt, updatedBy: colorUpdatedBy });
           }
 
           return newProds;
@@ -1853,14 +1884,17 @@ const computeTotalsFromFirebase = async () => {
 
         setProducts(prev => {
           const newProds = { ...prev };
+          const colorUpdatedAt = loc.metadata?.updated_at || loc.metadata?.created_at || Date.now();
+          const colorUpdatedBy = (typeof loc.metadata?.updated_by === 'string' ? loc.metadata?.updated_by : (loc.metadata?.updated_by?.displayName || loc.metadata?.updated_by?.email)) || 'Sistema';
+
           if (newProds[key]) {
             const colorIndex = newProds[key].colors.findIndex(c => c.code === loc.color);
             if (colorIndex >= 0) {
-              newProds[key].colors[colorIndex] = { code: loc.color, quantity: loc.quantity };
-              newProds[key].lastModified = new Date(loc.metadata.updated_at).toISOString();
+              newProds[key].colors[colorIndex] = { code: loc.color, quantity: loc.quantity, updatedAt: colorUpdatedAt, updatedBy: colorUpdatedBy };
+              newProds[key].lastModified = new Date(colorUpdatedAt).toISOString();
             } else {
-              newProds[key].colors.push({ code: loc.color, quantity: loc.quantity });
-              newProds[key].lastModified = new Date(loc.metadata.updated_at).toISOString();
+              newProds[key].colors.push({ code: loc.color, quantity: loc.quantity, updatedAt: colorUpdatedAt, updatedBy: colorUpdatedBy });
+              newProds[key].lastModified = new Date(colorUpdatedAt).toISOString();
             }
             newProds[key].observation = loc.observation || newProds[key].observation || '';
           }
@@ -1988,6 +2022,7 @@ const computeTotalsFromFirebase = async () => {
         window.removeEventListener('touchstart', resetInactivityTimer);
         window.removeEventListener('scroll', resetInactivityTimer);
         unsubShelves();
+        unsubLocRecords();
         unsubAdded();
         unsubChanged();
         unsubRemoved();
@@ -2523,13 +2558,44 @@ const computeTotalsFromFirebase = async () => {
     }
   };
 
+  const recordLocationMovement = async (shelfId, row, col, actionType, details = {}) => {
+    try {
+      const targetShelf = (Array.isArray(shelves) ? shelves : []).find(s => s.id === parseInt(shelfId));
+      const locKey = `${shelfId}_${row}_${col}`;
+      const recordData = {
+        shelfId: parseInt(shelfId),
+        row: parseInt(row),
+        col: parseInt(col),
+        shelfName: targetShelf?.name || '',
+        corridor: targetShelf ? getShelfCorridor(targetShelf) : '',
+        label: targetShelf ? `L${targetShelf.rows - row}:C${col + 1}` : `L${row}:C${col}`,
+        lastAction: actionType, // 'ATUALIZACAO', 'EXCLUSAO', 'MOVIMENTO_ORIGEM', 'MOVIMENTO_DESTINO'
+        lastMovementAt: Date.now(),
+        lastMovementBy: user?.name || 'Usuário',
+        lastSku: details.sku || '',
+        lastColors: details.colors || [],
+        details: details.text || ''
+      };
+
+      setLocationRecords(prev => ({
+        ...prev,
+        [locKey]: recordData
+      }));
+
+      await set(ref(database, `location_records/${locKey}`), recordData);
+    } catch (err) {
+      console.warn('Aviso ao registrar movimentação na localização:', err);
+    }
+  };
+
   const openEditProduct = async (row, col) => {
     if (!currentShelf) return;
     const key = `${currentShelf.id}-${row}-${col}`;
     setEditingPosition({ row, col, key });
     
     // Carregar dados do produto (incluindo observação) do Firebase
-    const existingProduct = (products || {})[key] || { 
+    const existing = (products || {})[key];
+    const existingProduct = existing ? JSON.parse(JSON.stringify(existing)) : { 
       sku: '', 
       unit: 'caixas',
       colors: [],
@@ -2542,7 +2608,15 @@ const computeTotalsFromFirebase = async () => {
       for (const [, loc] of Object.entries(locs)) {
         if (loc.shelf?.id === currentShelf.id && loc.position?.row === row && loc.position?.col === col) {
           existingProduct.observation = loc.observation || '';
-          break;
+          const colorMatch = (existingProduct.colors || []).find(c => c.code === loc.color);
+          if (colorMatch) {
+            if (!colorMatch.updatedAt && loc.metadata?.updated_at) {
+              colorMatch.updatedAt = loc.metadata.updated_at;
+            }
+            if (!colorMatch.updatedBy && loc.metadata?.updated_by) {
+              colorMatch.updatedBy = (typeof loc.metadata.updated_by === 'string' ? loc.metadata.updated_by : loc.metadata.updated_by?.displayName) || 'Sistema';
+            }
+          }
         }
       }
     } catch (error) {}
@@ -2552,16 +2626,23 @@ const computeTotalsFromFirebase = async () => {
   };
 
   const addColor = () => {
+    const now = Date.now();
+    const newColor = { 
+      code: '', 
+      quantity: 0, 
+      updatedAt: now, 
+      updatedBy: user?.name || 'Usuário' 
+    };
     if (!editingProduct.colors) {
       setEditingProduct({
         ...editingProduct,
-        colors: [{ code: '', quantity: 0 }]
+        colors: [newColor]
       });
       return;
     }
     setEditingProduct({
       ...editingProduct,
-      colors: [...editingProduct.colors, { code: '', quantity: 0 }]
+      colors: [...editingProduct.colors, newColor]
     });
   };
 
@@ -2578,7 +2659,14 @@ const computeTotalsFromFirebase = async () => {
   const updateColor = (index, field, value) => {
     if (!editingProduct.colors) return;
     const newColors = [...editingProduct.colors];
-    newColors[index] = { ...newColors[index], [field]: value };
+    const prev = newColors[index] || {};
+    const hasChanged = prev[field] !== value;
+    newColors[index] = { 
+      ...prev, 
+      [field]: value,
+      updatedAt: hasChanged ? Date.now() : (prev.updatedAt || Date.now()),
+      updatedBy: hasChanged ? (user?.name || 'Usuário') : (prev.updatedBy || user?.name || 'Usuário')
+    };
     setEditingProduct({
       ...editingProduct,
       colors: newColors
@@ -2675,24 +2763,53 @@ const saveProductToFirebase = async (shelfId, row, col, productData) => {
         }
       }
     }
+    const locRecordKey = `${shelfId}_${row}_${col}`;
     if (!productData?.sku || !productData?.colors || productData.colors.length === 0) {
+      let existingSku = '';
+      const existingColors = [];
       for (const [locId, loc] of Object.entries(allLocs)) {
         if (loc.shelf?.id === shelfId && loc.position?.row === row && loc.position?.col === col) {
           updates[`locations/${locId}`] = null;
+          if (loc.sku) existingSku = loc.sku;
+          if (loc.color) existingColors.push({ code: loc.color, quantity: loc.quantity });
         }
       }
+      // Manter registro da movimentação/exclusão na localização
+      updates[`location_records/${locRecordKey}`] = {
+        shelfId,
+        row,
+        col,
+        shelfName: currentShelf.name,
+        corridor: getShelfCorridor(currentShelf),
+        label: `L${currentShelf.rows - row}:C${col + 1}`,
+        lastAction: 'EXCLUSAO',
+        lastMovementAt: Date.now(),
+        lastMovementBy: user.name,
+        lastSku: existingSku || '',
+        lastColors: existingColors,
+        details: 'Item excluído por completo'
+      };
       if (Object.keys(updates).length > 0) {
         await update(ref(database), updates);
       }
       return;
     }
     const desiredIds = new Set();
+    const colorsForRecord = [];
     for (const c of (productData.colors || [])) {
       const code = c?.code;
       const qty = Number(c?.quantity);
       if (!code || qty <= 0) continue;
+      const colorUpdatedAt = c.updatedAt || Date.now();
+      const colorUpdatedBy = c.updatedBy || user.name;
       const locationId = `loc_${currentShelf.id}_${row}_${col}_${sanitizeKeySegment(productData.sku)}_${sanitizeKeySegment(code)}`;
       desiredIds.add(locationId);
+      colorsForRecord.push({
+        code: String(code),
+        quantity: qty,
+        updatedAt: colorUpdatedAt,
+        updatedBy: colorUpdatedBy
+      });
       updates[`locations/${locationId}`] = {
         sku: productData.sku,
         color: code,
@@ -2710,11 +2827,26 @@ const saveProductToFirebase = async (shelfId, row, col, productData) => {
           label: `L${currentShelf.rows - row}:C${col + 1}`
         },
         metadata: {
-          updated_at: Date.now(),
-          updated_by: user.name
+          updated_at: colorUpdatedAt,
+          updated_by: colorUpdatedBy
         }
       };
     }
+    // Registrar atualização da localização
+    updates[`location_records/${locRecordKey}`] = {
+      shelfId,
+      row,
+      col,
+      shelfName: currentShelf.name,
+      corridor: getShelfCorridor(currentShelf),
+      label: `L${currentShelf.rows - row}:C${col + 1}`,
+      lastAction: 'ATUALIZACAO',
+      lastMovementAt: Date.now(),
+      lastMovementBy: user.name,
+      lastSku: productData.sku,
+      lastColors: colorsForRecord
+    };
+
     for (const [locId, loc] of Object.entries(allLocs)) {
       if (loc.shelf?.id === shelfId && loc.position?.row === row && loc.position?.col === col) {
         if (!desiredIds.has(locId)) {
@@ -2747,13 +2879,23 @@ const saveProduct = async () => {
   const oldProduct = (products || {})[editingPosition.key];
   
   if (!editingProduct.sku.trim() || !editingProduct.colors || editingProduct.colors.length === 0) {
-    // Removendo produto
+    // Removendo produto por completo
     const newProducts = { ...(products || {}) };
     delete newProducts[editingPosition.key];
     setProducts(newProducts);
     
-    // 🆕 AGUARDAR Firebase salvar ANTES de sincronizar
     if (editingPosition && currentShelf) {
+      await recordLocationMovement(
+        currentShelf.id,
+        editingPosition.row,
+        editingPosition.col,
+        'EXCLUSAO',
+        {
+          sku: oldProduct?.sku || '',
+          colors: oldProduct?.colors || [],
+          text: 'Item excluído por completo'
+        }
+      );
       await saveProductToFirebase(
         currentShelf.id,
         editingPosition.row,
@@ -2761,14 +2903,22 @@ const saveProduct = async () => {
         { sku: '', colors: [] }  // Produto vazio para remover
       );
     }
-    
-    // Sync será disparado pelos listeners de Firebase
   } else {
     const previousColors = (oldProduct?.colors || []);
     const incomingColors = (editingProduct.colors || []);
     const validColors = incomingColors
       .filter(c => c && c.code && Number(c.quantity) > 0)
-      .map(c => ({ code: String(c.code), quantity: Number(c.quantity) }));
+      .map(c => {
+        const prevMatch = previousColors.find(pc => String(pc.code).trim() === String(c.code).trim());
+        const qtyChanged = !prevMatch || Number(prevMatch.quantity) !== Number(c.quantity);
+        return {
+          code: String(c.code).trim(),
+          quantity: Number(c.quantity),
+          updatedAt: qtyChanged ? (c.updatedAt || Date.now()) : (prevMatch.updatedAt || c.updatedAt || Date.now()),
+          updatedBy: qtyChanged ? (c.updatedBy || user.name) : (prevMatch.updatedBy || c.updatedBy || user.name)
+        };
+      });
+
     if (validColors.length > 0) {
       const updatedProduct = {
         ...editingProduct,
@@ -2781,21 +2931,62 @@ const saveProduct = async () => {
       if (editingPosition && currentShelf) {
         await saveProductToFirebase(currentShelf.id, editingPosition.row, editingPosition.col, updatedProduct);
       }
-      
-      // Sync será disparado pelos listeners de Firebase
-      
-      // Remoções serão sincronizadas via onChildRemoved
     } else {
       const newProducts = { ...(products || {}) };
       delete newProducts[editingPosition.key];
       setProducts(newProducts);
       if (editingPosition && currentShelf) {
+        await recordLocationMovement(
+          currentShelf.id,
+          editingPosition.row,
+          editingPosition.col,
+          'EXCLUSAO',
+          {
+            sku: oldProduct?.sku || '',
+            colors: oldProduct?.colors || [],
+            text: 'Item excluído por completo'
+          }
+        );
         await saveProductToFirebase(currentShelf.id, editingPosition.row, editingPosition.col, { sku: '', colors: [] });
       }
-      // Remoções serão sincronizadas via onChildRemoved
     }
   }
   
+  setShowEditProduct(false);
+  setEditingProduct(null);
+  setEditingPosition(null);
+};
+
+// Exclusão completa do item com manutenção permanente do registro na localização
+const deleteProductCompletely = async () => {
+  if (!editingPosition || !currentShelf) return;
+  if (typeof window !== 'undefined' && window.confirm && !window.confirm('Deseja realmente excluir este item por completo? O registro com data e hora da exclusão será mantido nesta localização.')) {
+    return;
+  }
+  const oldProduct = (products || {})[editingPosition.key];
+  const newProducts = { ...(products || {}) };
+  delete newProducts[editingPosition.key];
+  setProducts(newProducts);
+
+  await recordLocationMovement(
+    currentShelf.id,
+    editingPosition.row,
+    editingPosition.col,
+    'EXCLUSAO',
+    {
+      sku: oldProduct?.sku || '',
+      colors: oldProduct?.colors || [],
+      text: 'Item excluído por completo'
+    }
+  );
+
+  await saveProductToFirebase(
+    currentShelf.id,
+    editingPosition.row,
+    editingPosition.col,
+    { sku: '', colors: [] }
+  );
+
   setShowEditProduct(false);
   setEditingProduct(null);
   setEditingPosition(null);
@@ -3480,19 +3671,43 @@ const saveProduct = async () => {
               WebkitUserSelect: 'none',
               WebkitTouchCallout: 'none'
             }}
-            title={product ? `${isMobile ? (moveModeEnabled ? 'Modo Mover ativo' : 'Ative Modo Mover') : 'Clique e arraste para mover'}` : 'Toque para adicionar produto'}
+            title={
+              product 
+                ? `${isMobile ? (moveModeEnabled ? 'Modo Mover ativo' : 'Toque para editar') : 'Clique para editar / arraste para mover'}` 
+                : (() => {
+                    const locRec = locationRecords[`${currentShelf.id}_${row}_${col}`];
+                    if (locRec && locRec.lastMovementAt) {
+                      return `Localização vazia. Registro: ${locRec.lastAction === 'EXCLUSAO' ? 'Item excluído' : 'Última movimentação'} em ${formatMovementDate(locRec.lastMovementAt)}${locRec.lastSku ? ` (SKU: ${locRec.lastSku})` : ''}`;
+                    }
+                    return 'Toque para adicionar produto';
+                  })()
+            }
           >
             {product && typeof product === 'object' && product.sku ? (
               <>
-                <div className={`font-bold text-blue-600 text-center leading-tight ${isMobile ? 'text-xs mb-1' : 'text-sm mb-1'}`}>
+                <div className={`font-bold text-blue-600 text-center leading-tight ${isMobile ? 'text-xs mb-0.5' : 'text-sm mb-0.5'} truncate max-w-full px-1`}>
                   {(product.sku && product.sku.length > 6) ? product.sku.slice(0, 6) + '...' : (product.sku || '')}
                 </div>
                 <div className="flex-1 flex items-center justify-center">
                   {getColorPreview(product.colors)}
                 </div>
-                <div className={`text-gray-500 text-center leading-tight ${isMobile ? 'text-xs' : 'text-xs'}`}>
+                <div className={`text-gray-500 text-center leading-tight ${isMobile ? 'text-[10px]' : 'text-xs'}`}>
                   {(product.colors && Array.isArray(product.colors) ? product.colors.length : 0)} cor{((product.colors && Array.isArray(product.colors) ? product.colors.length : 0) !== 1) ? 'es' : ''}
                 </div>
+                {/* Registro da última movimentação na localização */}
+                {(() => {
+                  const locRec = locationRecords[`${currentShelf.id}_${row}_${col}`];
+                  const timestamp = locRec?.lastMovementAt || (product.colors && product.colors[0]?.updatedAt) || product.lastModified;
+                  if (!timestamp) return null;
+                  return (
+                    <div 
+                      className="text-[9px] text-gray-400 text-center leading-none mt-0.5 truncate max-w-full px-0.5"
+                      title={`Última movimentação: ${formatMovementDate(timestamp)}${locRec?.lastMovementBy ? ` por ${locRec.lastMovementBy}` : ''}`}
+                    >
+                      {formatMovementDate(timestamp).split(' ')[1] || formatMovementDate(timestamp)}
+                    </div>
+                  );
+                })()}
                 {moveModeEnabled && (
                   <button
                     type="button"
@@ -3505,7 +3720,26 @@ const saveProduct = async () => {
                 )}
               </>
             ) : (
-              <Plus className={`text-gray-400 ${isMobile ? 'w-5 h-5' : 'w-6 h-6'}`} />
+              <div className="flex flex-col items-center justify-center w-full h-full p-1">
+                <Plus className={`text-gray-400 ${isMobile ? 'w-4 h-4' : 'w-5 h-5'}`} />
+                {(() => {
+                  const locRec = locationRecords[`${currentShelf.id}_${row}_${col}`];
+                  if (!locRec || !locRec.lastMovementAt) return null;
+                  return (
+                    <div 
+                      className="text-[8px] sm:text-[9px] text-gray-400 text-center leading-tight mt-0.5 truncate max-w-full px-0.5"
+                      title={`Registro nesta localização: ${locRec.lastAction === 'EXCLUSAO' ? 'Item excluído' : 'Última movimentação'} em ${formatMovementDate(locRec.lastMovementAt)}${locRec.lastMovementBy ? ` por ${locRec.lastMovementBy}` : ''}${locRec.lastSku ? ` (SKU: ${locRec.lastSku})` : ''}`}
+                    >
+                      <span className={`block font-medium ${locRec.lastAction === 'EXCLUSAO' ? 'text-red-500' : 'text-gray-500'}`}>
+                        {locRec.lastAction === 'EXCLUSAO' ? 'Excluído' : 'Últ. mov'}
+                      </span>
+                      <span className="block text-[8px] text-gray-400">
+                        {formatMovementDate(locRec.lastMovementAt).split(' ')[0]}
+                      </span>
+                    </div>
+                  );
+                })()}
+              </div>
             )}
           </div>
         );
@@ -4367,147 +4601,187 @@ const saveProduct = async () => {
         )}
 
         {/* Modal: Editar Produto */}
-        {showEditProduct && editingProduct && editingPosition && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-2 md:p-4 z-50">
-            <div className={`bg-white rounded-lg p-4 md:p-6 w-full ${isMobile ? 'max-w-full h-full max-h-full overflow-y-auto' : 'max-w-lg max-h-[90vh] overflow-y-auto'}`}>
-              <h3 className="text-lg font-semibold mb-4 text-center md:text-left">
-                Produto - L{currentShelf.rows - editingPosition.row}, C{editingPosition.col + 1}
-              </h3>
-              
-              <div className="space-y-4 md:space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium mb-2">SKU do Produto</label>
+        {showEditProduct && editingProduct && editingPosition && (() => {
+          const locRecord = locationRecords[`${currentShelf.id}_${editingPosition.row}_${editingPosition.col}`];
+          const hasExistingProduct = !!(products || {})[editingPosition.key]?.sku;
+
+          return (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-2 md:p-4 z-50">
+              <div className={`bg-white rounded-lg p-4 md:p-6 w-full ${isMobile ? 'max-w-full h-full max-h-full overflow-y-auto' : 'max-w-lg max-h-[90vh] overflow-y-auto'}`}>
+                <h3 className="text-lg font-semibold mb-2 text-center md:text-left">
+                  Produto - L{currentShelf.rows - editingPosition.row}, C{editingPosition.col + 1}
+                </h3>
+
+                {/* Registro histórico da localização */}
+                {locRecord && (
+                  <div className="mb-4 p-2.5 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-900 flex items-start gap-2">
+                    <Clock className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
+                    <div className="leading-tight">
+                      <span className="font-semibold">
+                        {locRecord.lastAction === 'EXCLUSAO' ? 'Último item excluído desta localização:' : 'Última movimentação nesta localização:'}
+                      </span>{' '}
+                      <span>{formatMovementDate(locRecord.lastMovementAt)}</span>
+                      {locRecord.lastMovementBy && <span className="text-blue-700"> • {locRecord.lastMovementBy}</span>}
+                      {locRecord.lastSku && <span className="text-gray-600"> • SKU: {locRecord.lastSku}</span>}
+                    </div>
+                  </div>
+                )}
+                
+                <div className="space-y-4 md:space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium mb-2">SKU do Produto</label>
+                      <input
+                        type="text"
+                        className="w-full px-3 py-3 md:py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-16px"
+                        value={editingProduct.sku}
+                        onChange={(e) => setEditingProduct({...editingProduct, sku: e.target.value.toUpperCase()})}
+                        placeholder="Ex: FO130"
+                        style={{ fontSize: '16px' }}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-2">Unidade</label>
+                      <select
+                        className="w-full px-3 py-3 md:py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-16px"
+                        value={editingProduct.unit}
+                        onChange={(e) => setEditingProduct({...editingProduct, unit: e.target.value})}
+                        style={{ fontSize: '16px' }}
+                      >
+                        <option value="caixas">Caixas</option>
+                        <option value="peças">Peças</option>
+                        <option value="unidades">Unidades</option>
+                        <option value="pacotes">Pacotes</option>
+                        <option value="metros">Metros</option>
+                        <option value="quilos">Quilos</option>
+                      </select>
+                    </div>
+                  </div>
+                  
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium mb-2">Observações</label>
                     <input
                       type="text"
                       className="w-full px-3 py-3 md:py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-16px"
-                      value={editingProduct.sku}
-                      onChange={(e) => setEditingProduct({...editingProduct, sku: e.target.value.toUpperCase()})}
-                      placeholder="Ex: FO130"
+                      value={editingProduct.observation || ''}
+                      onChange={(e) => setEditingProduct({...editingProduct, observation: e.target.value})}
+                      placeholder="Observações do produto (opcional)"
                       style={{ fontSize: '16px' }}
                     />
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-2">Unidade</label>
-                    <select
-                      className="w-full px-3 py-3 md:py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-16px"
-                      value={editingProduct.unit}
-                      onChange={(e) => setEditingProduct({...editingProduct, unit: e.target.value})}
-                      style={{ fontSize: '16px' }}
-                    >
-                      <option value="caixas">Caixas</option>
-                      <option value="peças">Peças</option>
-                      <option value="unidades">Unidades</option>
-                      <option value="pacotes">Pacotes</option>
-                      <option value="metros">Metros</option>
-                      <option value="quilos">Quilos</option>
-                    </select>
-                  </div>
-                </div>
-                
-                <div className="mb-4">
-                  <label className="block text-sm font-medium mb-2">Observações</label>
-                  <input
-                    type="text"
-                    className="w-full px-3 py-3 md:py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-16px"
-                    value={editingProduct.observation || ''}
-                    onChange={(e) => setEditingProduct({...editingProduct, observation: e.target.value})}
-                    placeholder="Observações do produto (opcional)"
-                    style={{ fontSize: '16px' }}
-                  />
-                </div>
-                
-                <div>
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
-                    <label className="block text-sm font-medium">Cores e Quantidades</label>
-                    <button
-                      onClick={addColor}
-                      className="flex items-center justify-center gap-1 px-3 py-2 bg-green-600 text-white rounded text-sm hover:bg-green-700 min-h-[44px]"
-                    >
-                      <Plus className="w-3 h-3" />
-                      Adicionar Cor
-                    </button>
-                  </div>
                   
-                  <div className="space-y-2 max-h-72 overflow-y-auto">
-                    {(editingProduct.colors || []).map((color, index) => (
-                      <div key={index} className="flex gap-2 items-center p-2 bg-gray-50 rounded">
-                        <input
-                          type="text"
-                          placeholder="Código (ex: 102)"
-                          className="w-24 px-2 py-2 md:py-1 border border-gray-300 rounded text-sm text-16px"
-                          value={color.code}
-                          onChange={(e) => updateColor(index, 'code', e.target.value)}
-                          style={{ fontSize: '16px' }}
-                        />
-                        <div className="flex items-center gap-1">
-                          <button
-                            onClick={() => updateColor(index, 'quantity', Math.max(0, (color.quantity || 0) - 1))}
-                            className="w-8 h-8 flex items-center justify-center bg-gray-200 hover:bg-gray-300 rounded text-gray-600 font-bold"
-                          >
-                            -
-                          </button>
-                          <input
-                            type="number"
-                            placeholder="0"
-                            min="0"
-                            className="w-16 px-2 py-2 md:py-1 border border-gray-300 rounded text-sm text-center text-16px"
-                            value={color.quantity}
-                            onChange={(e) => updateColor(index, 'quantity', parseInt(e.target.value) || 0)}
-                            style={{ fontSize: '16px' }}
-                          />
-                          <button
-                            onClick={() => updateColor(index, 'quantity', (color.quantity || 0) + 1)}
-                            className="w-8 h-8 flex items-center justify-center bg-gray-200 hover:bg-gray-300 rounded text-gray-600 font-bold"
-                          >
-                            +
-                          </button>
-                        </div>
-                        <button
-                          onClick={() => removeColor(index)}
-                          className="p-2 text-red-500 hover:bg-red-50 rounded min-h-[44px] min-w-[44px] flex items-center justify-center"
-                        >
-                          <Minus className="w-4 h-4" />
-                        </button>
-                      </div>
-                    ))}
+                  <div>
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+                      <label className="block text-sm font-medium">Cores e Quantidades</label>
+                      <button
+                        onClick={addColor}
+                        className="flex items-center justify-center gap-1 px-3 py-2 bg-green-600 text-white rounded text-sm hover:bg-green-700 min-h-[44px]"
+                      >
+                        <Plus className="w-3 h-3" />
+                        Adicionar Cor
+                      </button>
+                    </div>
                     
-                    {(!editingProduct.colors || editingProduct.colors.length === 0) && (
-                      <div className="text-sm text-gray-500 p-4 text-center">
-                        Nenhuma cor adicionada. Toque em "Adicionar Cor" para começar.
-                      </div>
-                    )}
+                    <div className="space-y-2 max-h-72 overflow-y-auto">
+                      {(editingProduct.colors || []).map((color, index) => (
+                        <div key={index} className="flex flex-col p-2 bg-gray-50 rounded border border-gray-200">
+                          <div className="flex gap-2 items-center">
+                            <input
+                              type="text"
+                              placeholder="Código (ex: 102)"
+                              className="w-24 px-2 py-2 md:py-1 border border-gray-300 rounded text-sm text-16px"
+                              value={color.code}
+                              onChange={(e) => updateColor(index, 'code', e.target.value)}
+                              style={{ fontSize: '16px' }}
+                            />
+                            <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => updateColor(index, 'quantity', Math.max(0, (color.quantity || 0) - 1))}
+                                className="w-8 h-8 flex items-center justify-center bg-gray-200 hover:bg-gray-300 rounded text-gray-600 font-bold"
+                              >
+                                -
+                              </button>
+                              <input
+                                type="number"
+                                placeholder="0"
+                                min="0"
+                                className="w-16 px-2 py-2 md:py-1 border border-gray-300 rounded text-sm text-center text-16px"
+                                value={color.quantity}
+                                onChange={(e) => updateColor(index, 'quantity', parseInt(e.target.value) || 0)}
+                                style={{ fontSize: '16px' }}
+                              />
+                              <button
+                                type="button"
+                                onClick={() => updateColor(index, 'quantity', (color.quantity || 0) + 1)}
+                                className="w-8 h-8 flex items-center justify-center bg-gray-200 hover:bg-gray-300 rounded text-gray-600 font-bold"
+                              >
+                                +
+                              </button>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => removeColor(index)}
+                              className="p-2 text-red-500 hover:bg-red-50 rounded min-h-[44px] min-w-[44px] flex items-center justify-center ml-auto"
+                              title="Excluir cor"
+                            >
+                              <Minus className="w-4 h-4" />
+                            </button>
+                          </div>
+                          {/* Registro da atualização com a data e hora da movimentação em uma única linha com tamanho de fonte bem pequena abaixo de cada cor */}
+                          <div className="text-[10px] sm:text-[11px] text-gray-500 mt-1.5 pl-1 truncate flex items-center gap-1 border-t border-gray-200/70 pt-1">
+                            <Clock className="w-3 h-3 text-gray-400 flex-shrink-0" />
+                            <span className="truncate">
+                              {color.updatedAt 
+                                ? `Atualizado: ${formatMovementDate(color.updatedAt)}${color.updatedBy ? ` • ${color.updatedBy}` : ''}`
+                                : 'Nova cor (registro gerado ao salvar)'}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                      
+                      {(!editingProduct.colors || editingProduct.colors.length === 0) && (
+                        <div className="text-sm text-gray-500 p-4 text-center">
+                          Nenhuma cor adicionada. Toque em "Adicionar Cor" para começar.
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
-              
-              <div className="flex gap-3 mt-6">
-                <button
-                  onClick={saveProduct}
-                  className="flex-1 flex items-center justify-center gap-2 px-4 py-3 md:py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 min-h-[48px]"
-                >
-                  <Save className="w-4 h-4" />
-                  Salvar
-                </button>
-                <button
-                  onClick={() => setShowEditProduct(false)}
-                  className="flex-1 flex items-center justify-center gap-2 px-4 py-3 md:py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 min-h-[48px]"
-                >
-                  <X className="w-4 h-4" />
-                  Cancelar
-                </button>
-              </div>
-              
-              {isMobile && (
-                <div className="mt-4 p-3 bg-blue-50 rounded-lg">
-                  <p className="text-sm text-blue-600">
-                    💡 Dicas: Para remover o produto, apague o SKU e salve.
-                  </p>
+                
+                <div className="flex flex-col sm:flex-row gap-2 mt-6">
+                  <button
+                    type="button"
+                    onClick={saveProduct}
+                    className="flex-1 flex items-center justify-center gap-2 px-4 py-3 md:py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 min-h-[48px] font-medium"
+                  >
+                    <Save className="w-4 h-4" />
+                    Salvar
+                  </button>
+                  {hasExistingProduct && (
+                    <button
+                      type="button"
+                      onClick={deleteProductCompletely}
+                      className="flex items-center justify-center gap-1.5 px-3 py-3 md:py-2 bg-red-50 text-red-600 border border-red-200 rounded-lg hover:bg-red-100 min-h-[48px] text-xs font-medium"
+                      title="Excluir este item mantendo o registro na localização"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      Excluir Item (Manter Registro)
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setShowEditProduct(false)}
+                    className="flex-1 flex items-center justify-center gap-2 px-4 py-3 md:py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 min-h-[48px]"
+                  >
+                    <X className="w-4 h-4" />
+                    Cancelar
+                  </button>
                 </div>
-              )}
+              </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* Modal: Confirmação de Exclusão */}
         {showDeleteConfirm && (
